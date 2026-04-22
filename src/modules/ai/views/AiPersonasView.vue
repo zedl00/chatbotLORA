@@ -1,6 +1,6 @@
 <!-- Ruta: /src/modules/ai/views/AiPersonasView.vue -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import type { BotPersona, CreateBotPersonaInput } from '@/types/ai.types'

@@ -13,10 +13,12 @@ node_modules/
 # ── Builds ────────────────────────────────────────
 dist/
 dist-ssr/
+dist.zip
+lora.zip
 *.local
 .vite/
 .turbo/
-
+.DS_Store
 # ── Supabase ──────────────────────────────────────
 .supabase/
 supabase/.temp/
@@ -30,6 +32,14 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Archivos de credenciales y secretos
+docs/apikeyantropic
+docs/*.key
+*.pem
+*.secret
+credentials.json
+secrets.json
 
 # ── Editor / OS ───────────────────────────────────
 .DS_Store

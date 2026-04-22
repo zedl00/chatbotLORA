@@ -36,10 +36,10 @@ const scrollEl = ref<HTMLElement | null>(null)
 const selectedPersona = computed(() => personas.value.find((p) => p.id === selectedPersonaId.value))
 
 const totalCost = computed(() => {
-  return messages.value.reduce((sum, m) => sum + (m.meta?.costUsd ?? 0), 0)
+  return messages.value.reduce((sum, m) => sum + Number(m.meta?.costUsd ?? 0), 0)
 })
 const totalTokens = computed(() => {
-  return messages.value.reduce((sum, m) => sum + (m.meta?.tokensUsed ?? 0), 0)
+  return messages.value.reduce((sum, m) => sum + Number(m.meta?.tokensUsed ?? 0), 0)
 })
 
 async function load() {
@@ -82,19 +82,19 @@ async function send() {
       conversationId: conversationId.value ?? undefined
     })
 
-    conversationId.value = result.conversationId
+    conversationId.value = result.conversationId ?? null
 
     messages.value.push({
-      id: result.botMessageId,
+      id: result.botMessageId ?? `bot-${Date.now()}`,
       role: 'bot',
-      text: result.botResponse,
+      text: result.botResponse ?? '(sin respuesta)',
       timestamp: new Date().toISOString(),
       meta: {
-        tokensUsed: result.tokensUsed,
-        costUsd: result.costUsd,
-        latencyMs: result.latencyMs,
-        handoffDetected: result.handoffDetected,
-        ragUsed: result.ragUsed
+        tokensUsed: Number(result.tokensUsed ?? 0),
+        costUsd: Number(result.costUsd ?? 0),
+        latencyMs: Number(result.latencyMs ?? 0),
+        handoffDetected: Boolean(result.handoffDetected),
+        ragUsed: Boolean(result.ragUsed)
       }
     })
   } catch (e) {
@@ -117,6 +117,15 @@ function changePersona() {
     if (!confirm('Cambiar de persona inicia una nueva conversación. ¿Continuar?')) return
     reset()
   }
+}
+
+function formatModelName(model: string | null | undefined): string {
+  if (!model) return '—'
+  return model
+    .replace('claude-', '')
+    .replace('-20250514', '')
+    .replace('-20251001', '')
+    .replace('-20241022', '')
 }
 
 onMounted(load)
@@ -148,7 +157,7 @@ onMounted(load)
       </div>
 
       <div v-if="selectedPersona" class="card p-3 text-xs space-y-2 bg-slate-50">
-        <div><strong>Modelo:</strong> {{ selectedPersona.model.replace('claude-', '').replace('-20250514', '').replace('-20251001', '') }}</div>
+        <div><strong>Modelo:</strong> {{ formatModelName(selectedPersona.model) }}</div>
         <div><strong>Temp:</strong> {{ selectedPersona.temperature }}</div>
         <div><strong>Tono:</strong> {{ selectedPersona.tone }}</div>
         <div>
@@ -217,9 +226,9 @@ onMounted(load)
             >{{ msg.text }}</div>
 
             <div v-if="msg.meta" class="flex flex-wrap gap-1.5 text-[10px]">
-              <span class="text-slate-400">{{ msg.meta.latencyMs }}ms</span>
-              <span class="text-slate-400">· {{ msg.meta.tokensUsed }} tokens</span>
-              <span class="text-slate-400">· ${{ msg.meta.costUsd.toFixed(5) }}</span>
+              <span class="text-slate-400">{{ Number(msg.meta.latencyMs ?? 0) }}ms</span>
+              <span class="text-slate-400">· {{ Number(msg.meta.tokensUsed ?? 0) }} tokens</span>
+              <span class="text-slate-400">· ${{ Number(msg.meta.costUsd ?? 0).toFixed(5) }}</span>
               <span v-if="msg.meta.ragUsed" class="text-emerald-600">· 📚 RAG</span>
               <span v-if="msg.meta.handoffDetected" class="text-amber-600 font-medium">· ⚠️ Handoff</span>
             </div>

@@ -87,17 +87,57 @@ export async function embedKnowledgeDoc(documentId: string): Promise<{ chunks: n
 
 // ═══════════════════════════════════════════════════════════════
 // PLAYGROUND TEST (inyecta mensaje ficticio y obtiene respuesta)
+//
+// El backend devuelve:
+//   { response, meta: { model, inputTokens, outputTokens, tokensUsed,
+//                       costUsd, latencyMs, handoffDetected, ragUsed } }
+//
+// El frontend (PlaygroundResponse) espera campos planos.
+// Esta función actúa como adaptador entre los dos formatos.
 // ═══════════════════════════════════════════════════════════════
+interface AiTestMessageBackendResponse {
+  response?: string
+  messageId?: string
+  conversationId?: string
+  contactMessageId?: string
+  meta?: {
+    model?: string
+    inputTokens?: number
+    outputTokens?: number
+    tokensUsed?: number
+    costUsd?: number | string
+    latencyMs?: number
+    handoffDetected?: boolean
+    ragUsed?: boolean
+  }
+}
+
 export async function playgroundSend(params: {
   message: string
   personaId?: string
   conversationId?: string
 }): Promise<PlaygroundResponse> {
-  const { data, error } = await supabase.functions.invoke<PlaygroundResponse>(
+  const { data, error } = await supabase.functions.invoke<AiTestMessageBackendResponse>(
     'ai-test-message',
     { body: params }
   )
   if (error) throw new Error(`[ai-test-message] ${error.message}`)
   if (!data) throw new Error('Respuesta vacía')
-  return data
+
+  const meta = data.meta ?? {}
+
+  const mapped: PlaygroundResponse = {
+    success: true,
+    conversationId: data.conversationId ?? params.conversationId ?? '',
+    contactMessageId: data.contactMessageId ?? `local-${Date.now()}`,
+    botMessageId: data.messageId ?? `bot-${Date.now()}`,
+    botResponse: data.response ?? '',
+    handoffDetected: Boolean(meta.handoffDetected),
+    tokensUsed: Number(meta.tokensUsed ?? 0),
+    costUsd: Number(meta.costUsd ?? 0),
+    latencyMs: Number(meta.latencyMs ?? 0),
+    ragUsed: Boolean(meta.ragUsed)
+  }
+
+  return mapped
 }

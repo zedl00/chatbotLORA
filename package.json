@@ -1,8 +1,8 @@
 {
-  "name": "chatbot-ia-empresarial",
+  "name": "lora",
   "version": "0.1.0",
   "private": true,
-  "description": "ChatBot IA Empresarial Omnicanal — Vue 3 + Supabase + Claude API",
+  "description": "ChatBot IA Empresarial Omnicanal",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"

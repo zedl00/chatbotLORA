@@ -77,7 +77,7 @@ async function handleSignOut() {
         <div class="w-8 h-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
           C
         </div>
-        <span v-if="!uiStore.sidebarCollapsed" class="ml-3 font-semibold">ChatBot IA</span>
+        <span v-if="!uiStore.sidebarCollapsed" class="ml-3 font-semibold">LORA ChatBot</span>
       </div>
 
       <nav class="flex-1 p-2 overflow-auto">

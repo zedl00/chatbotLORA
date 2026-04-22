@@ -67,3 +67,19 @@ export function truncate(text: string | null | undefined, max = 60): string {
   if (!text) return ''
   return text.length > max ? text.slice(0, max) + '…' : text
 }
+
+export function formatDateFull(isoDate: string | null | undefined): string {
+  if (!isoDate) return ''
+  return new Date(isoDate).toLocaleString('es', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+export function timeAgo(isoDate: string | null | undefined): string {
+  return formatRelativeTime(isoDate)
+}
