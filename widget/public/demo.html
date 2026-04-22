@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo - ChatBot IA Widget</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      padding: 60px 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    h1 { font-size: 2.5rem; margin-bottom: 20px; color: #1e293b; }
+    p { color: #475569; line-height: 1.7; margin-bottom: 16px; font-size: 1.05rem; }
+    .hint {
+      background: #f0f9ff;
+      border-left: 4px solid #0ea5e9;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-top: 30px;
+      color: #0c4a6e;
+    }
+    .hint strong { color: #075985; }
+    code {
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.9em;
+      color: #be185d;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Demo del Widget ChatBot IA</h1>
+    <p>
+      Esta página es un ejemplo de cómo se vería tu widget embebido en un sitio web real.
+      En la esquina inferior derecha deberías ver la burbuja flotante.
+    </p>
+    <p>
+      El widget se conecta a tu proyecto Supabase y usa el canal <code>web_widget</code> que configuraste.
+      Los mensajes van directo al motor IA (Claude) si está habilitado en la persona asignada.
+    </p>
+    <p>
+      Abre el chat, escribe un mensaje y verás que:
+    </p>
+    <ul style="padding-left: 24px; color: #475569; line-height: 1.9;">
+      <li>El mensaje se guarda en tu base de datos</li>
+      <li>Aparece una conversación nueva en tu <strong>Inbox</strong> en tiempo real</li>
+      <li>Si la IA está activa, Claude responde automáticamente</li>
+      <li>Si el usuario pide hablar con un humano, se detecta el handoff</li>
+    </ul>
+
+    <div class="hint">
+      <strong>💡 Para probarlo:</strong><br />
+      1. Edita este archivo y reemplaza <code>YOUR_CHANNEL_ID</code>, <code>YOUR_SUPABASE_URL</code> y <code>YOUR_ANON_KEY</code>.<br />
+      2. Abre este HTML en tu navegador (doble clic o sirve con <code>python -m http.server</code>).<br />
+      3. La burbuja aparece abajo a la derecha.
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <!-- WIDGET: Reemplaza los valores con los tuyos                     -->
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <script
+    src="http://localhost:5173/widget.js"
+    data-channel-id="033fd98f-be93-4bf5-b090-94e26f091d94"
+    data-supabase-url="https://imvahmyywbtcfsduwbdq.supabase.co"
+      data-supabase-anon-key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltdmFobXl5d2J0Y2ZzZHV3YmRxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDAyMzUsImV4cCI6MjA5MjM3NjIzNX0.CoFec7ZW1oUahLOQZlxczzEXDvk4oZwVPlNxWpT_un0"
+    async
+  ></script>
+</body>
+</html>
