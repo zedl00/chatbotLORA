@@ -1,11 +1,19 @@
 // Ruta: /src/router/index.ts
 // ═══════════════════════════════════════════════════════════════
-// MODIFICADO en Sprint 4 (Widget + Inbox):
-//   - /admin/inbox ya existía, ahora apunta a la vista funcional
-//   - /admin/channels apunta a ChannelsView nuevo
+// MODIFICADO en Sprint 5 (Multi-tenant):
+//   - Nueva sección de rutas /super-admin/* con superAdminGuard
+//   - Nueva vista: /super-admin/organizations
+//   - Guard orgContextGuard agregado a la cadena
 // ═══════════════════════════════════════════════════════════════
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { authGuard, roleGuard, permissionGuard, mustChangePasswordGuard } from './guards'
+import {
+  authGuard,
+  roleGuard,
+  permissionGuard,
+  mustChangePasswordGuard,
+  orgContextGuard,
+  superAdminGuard
+} from './guards'
 
 const routes: RouteRecordRaw[] = [
   // AUTH
@@ -13,10 +21,10 @@ const routes: RouteRecordRaw[] = [
     path: '/auth',
     component: () => import('@/layouts/AuthLayout.vue'),
     children: [
-      { path: 'login',           name: 'auth.login',           component: () => import('@/modules/auth/views/LoginView.vue'),            meta: { public: true } },
-      { path: 'forgot-password', name: 'auth.forgot',          component: () => import('@/modules/auth/views/ForgotPasswordView.vue'),  meta: { public: true } },
-      { path: 'accept-invite',   name: 'auth.accept-invite',   component: () => import('@/modules/auth/views/AcceptInviteView.vue'),    meta: { public: true } },
-      { path: 'change-password', name: 'auth.change-password', component: () => import('@/modules/auth/views/ChangePasswordView.vue'),  meta: { requiresAuth: true } }
+      { path: 'login',           name: 'auth.login',           component: () => import('@/modules/auth/views/LoginView.vue'),            meta: { public: true, title: 'Iniciar sesión' } },
+      { path: 'forgot-password', name: 'auth.forgot',          component: () => import('@/modules/auth/views/ForgotPasswordView.vue'),  meta: { public: true, title: 'Recuperar contraseña' } },
+      { path: 'accept-invite',   name: 'auth.accept-invite',   component: () => import('@/modules/auth/views/AcceptInviteView.vue'),    meta: { public: true, title: 'Aceptar invitación' } },
+      { path: 'change-password', name: 'auth.change-password', component: () => import('@/modules/auth/views/ChangePasswordView.vue'),  meta: { requiresAuth: true, title: 'Cambiar contraseña' } }
     ]
   },
 
@@ -28,26 +36,42 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', redirect: { name: 'admin.dashboard' } },
 
-      { path: 'dashboard',   name: 'admin.dashboard',   component: () => import('@/modules/reports/views/DashboardView.vue'),    meta: { permission: 'reports.view' } },
-      { path: 'inbox',       name: 'admin.inbox',       component: () => import('@/modules/inbox/views/InboxView.vue'),          meta: { permission: 'conversations.read' } },
-      { path: 'contacts',    name: 'admin.contacts',    component: () => import('@/modules/contacts/views/ContactsView.vue'),    meta: { permission: 'contacts.read' } },
+      { path: 'dashboard',   name: 'admin.dashboard',   component: () => import('@/modules/reports/views/DashboardView.vue'),    meta: { permission: 'reports.view', title: 'Dashboard' } },
+      { path: 'inbox',       name: 'admin.inbox',       component: () => import('@/modules/inbox/views/InboxView.vue'),          meta: { permission: 'conversations.read', title: 'Bandeja' } },
+      { path: 'contacts',    name: 'admin.contacts',    component: () => import('@/modules/contacts/views/ContactsView.vue'),    meta: { permission: 'contacts.read', title: 'Contactos' } },
 
-      { path: 'flows',       name: 'admin.flows',       component: () => import('@/modules/flows/views/FlowsView.vue'),          meta: { permission: 'flows.read' } },
-      { path: 'knowledge',   name: 'admin.knowledge',   component: () => import('@/modules/knowledge/views/KnowledgeView.vue'),  meta: { permission: 'knowledge.read' } },
-      { path: 'channels',    name: 'admin.channels',    component: () => import('@/modules/channels/views/ChannelsView.vue'),    meta: { permission: 'channels.read' } },
-      { path: 'agents',      name: 'admin.agents',      component: () => import('@/modules/agents/views/AgentsView.vue'),        meta: { permission: 'agents.read' } },
-      { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view' } },
+      { path: 'flows',       name: 'admin.flows',       component: () => import('@/modules/flows/views/FlowsView.vue'),          meta: { permission: 'flows.read', title: 'Flujos' } },
+      { path: 'knowledge',   name: 'admin.knowledge',   component: () => import('@/modules/knowledge/views/KnowledgeView.vue'),  meta: { permission: 'knowledge.read', title: 'Conocimiento' } },
+      { path: 'channels',    name: 'admin.channels',    component: () => import('@/modules/channels/views/ChannelsView.vue'),    meta: { permission: 'channels.read', title: 'Canales' } },
+      { path: 'agents',      name: 'admin.agents',      component: () => import('@/modules/agents/views/AgentsView.vue'),        meta: { permission: 'agents.read', title: 'Equipo' } },
+      { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view', title: 'Reportes' } },
 
       // IA
-      { path: 'ai-personas', name: 'admin.ai-personas', component: () => import('@/modules/ai/views/AiPersonasView.vue'),        meta: { permission: 'ai.configure' } },
-      { path: 'playground',  name: 'admin.playground',  component: () => import('@/modules/playground/views/PlaygroundView.vue'),meta: { permission: 'ai.configure' } },
+      { path: 'ai-personas', name: 'admin.ai-personas', component: () => import('@/modules/ai/views/AiPersonasView.vue'),        meta: { permission: 'ai.configure', title: 'Personalidades IA' } },
+      { path: 'playground',  name: 'admin.playground',  component: () => import('@/modules/playground/views/PlaygroundView.vue'),meta: { permission: 'ai.configure', title: 'Playground' } },
 
       // Administración
-      { path: 'users',       name: 'admin.users',       component: () => import('@/modules/agents/views/UsersView.vue'),         meta: { permission: 'users.read' } },
-      { path: 'roles',       name: 'admin.roles',       component: () => import('@/modules/agents/views/RolesView.vue'),         meta: { permission: 'roles.read' } },
-      { path: 'invitations', name: 'admin.invitations', component: () => import('@/modules/agents/views/InvitationsView.vue'),   meta: { permission: 'users.invite' } },
-      { path: 'audit',       name: 'admin.audit',       component: () => import('@/modules/agents/views/AuditLogView.vue'),      meta: { permission: 'audit.read' } },
-      { path: 'settings',    name: 'admin.settings',    component: () => import('@/modules/settings/views/SettingsView.vue'),    meta: { permission: 'settings.read' } }
+      { path: 'users',       name: 'admin.users',       component: () => import('@/modules/agents/views/UsersView.vue'),         meta: { permission: 'users.read', title: 'Usuarios' } },
+      { path: 'roles',       name: 'admin.roles',       component: () => import('@/modules/agents/views/RolesView.vue'),         meta: { permission: 'roles.read', title: 'Roles' } },
+      { path: 'invitations', name: 'admin.invitations', component: () => import('@/modules/agents/views/InvitationsView.vue'),   meta: { permission: 'users.invite', title: 'Invitaciones' } },
+      { path: 'audit',       name: 'admin.audit',       component: () => import('@/modules/agents/views/AuditLogView.vue'),      meta: { permission: 'audit.read', title: 'Auditoría' } },
+      { path: 'settings',    name: 'admin.settings',    component: () => import('@/modules/settings/views/SettingsView.vue'),    meta: { permission: 'settings.read', title: 'Configuración' } }
+    ]
+  },
+
+  // 🆕 SUPER ADMIN — solo accesible para role 'super_admin'
+  {
+    path: '/super-admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { requiresAuth: true, superAdmin: true },
+    children: [
+      { path: '', redirect: { name: 'super-admin.organizations' } },
+      {
+        path: 'organizations',
+        name: 'super-admin.organizations',
+        component: () => import('@/modules/super-admin/views/OrganizationsView.vue'),
+        meta: { title: 'Organizaciones', superAdmin: true }
+      }
     ]
   },
 
@@ -57,9 +81,23 @@ const routes: RouteRecordRaw[] = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
+// ═══ Orden de guards (importante) ═══
+// 1. authGuard: verifica sesión
+// 2. mustChangePasswordGuard: fuerza cambio de contraseña si aplica
+// 3. orgContextGuard: valida contexto de tenant (subdomain)
+// 4. permissionGuard: verifica permisos granulares
+// 5. roleGuard: legacy, solo si meta.roles está presente
+// 6. Guard inline: valida meta.superAdmin = true
 router.beforeEach(authGuard)
 router.beforeEach(mustChangePasswordGuard)
+router.beforeEach(orgContextGuard)
 router.beforeEach(permissionGuard)
 router.beforeEach(roleGuard)
+router.beforeEach((to) => {
+  if (to.meta.superAdmin === true) {
+    return superAdminGuard(to, to, () => {}) as any
+  }
+  return true
+})
 
 export default router

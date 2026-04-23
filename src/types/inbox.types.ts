@@ -68,14 +68,29 @@ export interface InboxFilters {
   tag?: string
 }
 
-export interface ContactNote {
+/**
+ * Notas internas vinculadas a una conversación específica.
+ * Antes llamadas ContactNote cuando se creía que pertenecían al contacto.
+ * La tabla `notes` en la DB tiene: conversation_id, organization_id, author_id, content, pinned.
+ */
+export interface ConversationNote {
   id: string
-  contactId: string
+  conversationId: string
+  organizationId: string
+  authorId: string
+  authorName: string
+  authorAvatarUrl: string | null
   content: string
-  createdBy: string
-  createdByName?: string
+  pinned: boolean
   createdAt: string
+  updatedAt: string
 }
+
+/**
+ * @deprecated Usar ConversationNote. Se mantiene como alias temporal
+ * para no romper componentes que aún no se han migrado.
+ */
+export type ContactNote = ConversationNote
 
 export const STATUS_LABELS: Record<ConversationStatus, { label: string; color: string }> = {
   open:     { label: 'Abierta',    color: '#3b82f6' },

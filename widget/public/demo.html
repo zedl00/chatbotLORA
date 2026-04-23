@@ -1,84 +1,288 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Demo - ChatBot IA Widget</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo · LORA Widget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #0071E3;
+      --blue-dark: #0040A0;
+      --cyan: #06B6D4;
+      --violet: #8B5CF6;
+      --ink: #0A0A0A;
+      --slate: #475569;
+      --muted: #94a3b8;
+      --cream: #F5F5F7;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Inter', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
       min-height: 100vh;
-      padding: 40px 20px;
+      color: var(--ink);
+      background:
+        radial-gradient(at 20% 15%, rgba(0, 113, 227, 0.08) 0px, transparent 50%),
+        radial-gradient(at 80% 85%, rgba(6, 182, 212, 0.08) 0px, transparent 50%),
+        #FAFAFA;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
     .container {
-      max-width: 800px;
+      max-width: 920px;
       margin: 0 auto;
+      padding: 80px 24px 140px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 48px;
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 50%, var(--violet) 100%);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.04em;
+      box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);
+    }
+    .brand-text {
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: -0.06em;
+    }
+    .brand-text .dot { color: var(--blue); }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 113, 227, 0.08);
+      color: var(--blue);
+      padding: 5px 12px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      border: 1px solid rgba(0, 113, 227, 0.15);
+    }
+    .tag::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4ade80;
+      box-shadow: 0 0 6px #4ade80;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    h1 {
+      font-family: 'Inter Tight', sans-serif;
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin: 0 0 20px;
+    }
+    h1 .accent {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .lead {
+      font-size: 19px;
+      color: var(--slate);
+      max-width: 620px;
+      margin: 0 0 48px;
+      line-height: 1.55;
+    }
+    .card {
       background: white;
+      border: 1px solid #E5E7EB;
       border-radius: 20px;
-      padding: 60px 40px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      padding: 36px;
+      margin-top: 24px;
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03),
+        0 8px 24px rgba(0, 0, 0, 0.04);
     }
-    h1 { font-size: 2.5rem; margin-bottom: 20px; color: #1e293b; }
-    p { color: #475569; line-height: 1.7; margin-bottom: 16px; font-size: 1.05rem; }
-    .hint {
-      background: #f0f9ff;
-      border-left: 4px solid #0ea5e9;
-      padding: 16px 20px;
-      border-radius: 8px;
-      margin-top: 30px;
-      color: #0c4a6e;
+    .card h2 {
+      font-family: 'Inter Tight', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 16px;
     }
-    .hint strong { color: #075985; }
-    code {
-      background: #f1f5f9;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-family: 'SF Mono', Monaco, monospace;
-      font-size: 0.9em;
-      color: #be185d;
+    .card p {
+      color: var(--slate);
+      margin: 0 0 16px;
+      font-size: 15px;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin: 28px 0 8px;
+    }
+    .feature {
+      padding: 18px;
+      background: #FAFAFA;
+      border: 1px solid #F1F5F9;
+      border-radius: 14px;
+    }
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      margin-bottom: 12px;
+    }
+    .feature h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--ink);
+      font-family: 'Inter Tight', sans-serif;
+    }
+    .feature p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--slate);
+    }
+    .arrow {
+      position: fixed;
+      bottom: 100px;
+      right: 100px;
+      color: var(--blue);
+      font-family: 'Inter Tight', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      pointer-events: none;
+      animation: bounce 2s infinite;
+    }
+    .arrow svg {
+      display: block;
+      margin-top: 4px;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(6px); }
+    }
+    footer {
+      margin-top: 60px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    footer a {
+      color: var(--slate);
+      font-weight: 600;
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    footer a:hover { border-bottom-color: var(--blue); }
+    @media (max-width: 600px) {
+      .arrow { display: none; }
+      .container { padding: 48px 20px 140px; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🚀 Demo del Widget ChatBot IA</h1>
-    <p>
-      Esta página es un ejemplo de cómo se vería tu widget embebido en un sitio web real.
-      En la esquina inferior derecha deberías ver la burbuja flotante.
-    </p>
-    <p>
-      El widget se conecta a tu proyecto Supabase y usa el canal <code>web_widget</code> que configuraste.
-      Los mensajes van directo al motor IA (Claude) si está habilitado en la persona asignada.
-    </p>
-    <p>
-      Abre el chat, escribe un mensaje y verás que:
-    </p>
-    <ul style="padding-left: 24px; color: #475569; line-height: 1.9;">
-      <li>El mensaje se guarda en tu base de datos</li>
-      <li>Aparece una conversación nueva en tu <strong>Inbox</strong> en tiempo real</li>
-      <li>Si la IA está activa, Claude responde automáticamente</li>
-      <li>Si el usuario pide hablar con un humano, se detecta el handoff</li>
-    </ul>
-
-    <div class="hint">
-      <strong>💡 Para probarlo:</strong><br />
-      1. Edita este archivo y reemplaza <code>YOUR_CHANNEL_ID</code>, <code>YOUR_SUPABASE_URL</code> y <code>YOUR_ANON_KEY</code>.<br />
-      2. Abre este HTML en tu navegador (doble clic o sirve con <code>python -m http.server</code>).<br />
-      3. La burbuja aparece abajo a la derecha.
+    <div class="brand">
+      <div class="brand-mark">L</div>
+      <div class="brand-text">LORA<span class="dot">.</span></div>
     </div>
+
+    <span class="tag">Demo en vivo</span>
+    <h1>Prueba el widget <span class="accent">en vivo.</span></h1>
+    <p class="lead">
+      Esta es la experiencia que tus clientes finales verán embebida en sus sitios web.
+      El widget se instala con una sola línea de código y se adapta automáticamente al branding de cada cliente.
+    </p>
+
+    <div class="card">
+      <h2>¿Cómo funciona?</h2>
+      <p>
+        Haz click en el botón flotante de la esquina inferior derecha para abrir el chat.
+        El widget está conectado a un bot de IA real que responde al instante. Cuando un humano
+        del equipo toma la conversación, la transición es transparente para el usuario.
+      </p>
+
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <h3>Realtime bidireccional</h3>
+          <p>Los mensajes aparecen al instante en ambos lados vía WebSockets.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🤖</div>
+          <h3>IA de verdad</h3>
+          <p>Claude responde con contexto, personalidad y conocimiento de tu negocio.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📱</div>
+          <h3>Mobile-first</h3>
+          <p>Fullscreen en móviles, compacto en desktop. Sin configuración adicional.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎨</div>
+          <h3>100% personalizable</h3>
+          <p>Colores, copy, posición, icono. Se adapta al branding de cada cliente.</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Made with care by <a href="https://lorachat.net" target="_blank" rel="noopener">LORA</a> · Conversaciones que convierten.
+    </footer>
   </div>
 
-  <!-- ═════════════════════════════════════════════════════════════ -->
-  <!-- WIDGET: Reemplaza los valores con los tuyos                     -->
-  <!-- ═════════════════════════════════════════════════════════════ -->
+  <div class="arrow" aria-hidden="true">
+    Prueba el chat
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+      <path d="M12 5V19M12 19L18 13M12 19L6 13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <!--
+    En producción real, el widget se carga así:
+    <script
+      src="https://admin.lorachat.net/widget.js"
+      data-channel-id="TU_CHANNEL_ID"
+      data-supabase-url="https://TU_PROYECTO.supabase.co"
+      data-supabase-anon-key="TU_ANON_KEY"
+      async></script>
+  -->
+
+  <!-- Demo local: descomenta y reemplaza con tus credenciales de testing -->
+  <!--
   <script
-    src="http://localhost:5173/widget.js"
-    data-channel-id="033fd98f-be93-4bf5-b090-94e26f091d94"
-    data-supabase-url="https://imvahmyywbtcfsduwbdq.supabase.co"
-      data-supabase-anon-key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltdmFobXl5d2J0Y2ZzZHV3YmRxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDAyMzUsImV4cCI6MjA5MjM3NjIzNX0.CoFec7ZW1oUahLOQZlxczzEXDvk4oZwVPlNxWpT_un0"
-    async
-  ></script>
+    src="./widget.js"
+    data-channel-id="REEMPLAZAR_CON_CHANNEL_ID"
+    data-supabase-url="REEMPLAZAR_CON_SUPABASE_URL"
+    data-supabase-anon-key="REEMPLAZAR_CON_ANON_KEY"
+    async></script>
+  -->
 </body>
 </html>

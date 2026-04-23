@@ -1,4 +1,8 @@
 <!-- Ruta: /src/modules/channels/components/WidgetConfigEditor.vue -->
+<!-- ═══════════════════════════════════════════════════════════════
+     MODIFICADO en Rebranding público (Sprint 7.5):
+       - Label "Powered by ChatBot IA" → "Powered by LORA"
+     ═══════════════════════════════════════════════════════════════ -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { supabase } from '@/services/supabase.client'
@@ -101,7 +105,7 @@ onMounted(load)
         <div class="space-y-1 pt-2">
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" v-model="config.show_powered_by" />
-            Mostrar "Powered by ChatBot IA"
+            Mostrar "Powered by LORA"
           </label>
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" v-model="config.auto_open" />

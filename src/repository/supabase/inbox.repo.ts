@@ -4,7 +4,7 @@ import type {
   InboxConversation,
   InboxMessage,
   InboxFilters,
-  ContactNote,
+  ConversationNote,
   ConversationStatus
 } from '@/types/inbox.types'
 
@@ -58,6 +58,24 @@ function toMessage(r: any): InboxMessage {
       sentiment: r.message_classifications[0].sentiment,
       urgency: r.message_classifications[0].urgency
     } : undefined
+  }
+}
+
+/**
+ * Mapea un row crudo de la tabla `notes` (con join a users) al tipo del frontend.
+ */
+function toConversationNote(r: any): ConversationNote {
+  return {
+    id: r.id,
+    conversationId: r.conversation_id,
+    organizationId: r.organization_id,
+    authorId: r.author_id,
+    authorName: r.author?.full_name ?? 'Usuario',
+    authorAvatarUrl: r.author?.avatar_url ?? null,
+    content: r.content,
+    pinned: r.pinned ?? false,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
   }
 }
 
@@ -195,51 +213,92 @@ export class SupabaseInboxRepo {
     if (error) throw error
   }
 
-  // ───── Notas del contacto ─────
-  async listNotes(contactId: string): Promise<ContactNote[]> {
+  // ───── Notas de la conversación ─────
+  // La tabla `notes` tiene: conversation_id, organization_id, author_id,
+  // content, pinned, created_at, updated_at.
+  // Las notas son internas del equipo, invisibles para el contacto.
+
+  /**
+   * Lista notas de una conversación, pinned primero, luego por fecha descendente.
+   */
+  async listNotes(conversationId: string): Promise<ConversationNote[]> {
     const { data, error } = await supabase
       .from('notes')
-      .select('id, contact_id, content, created_by, created_at, user:users!notes_created_by_fkey(full_name)')
-      .eq('contact_id', contactId)
+      .select(`
+        id,
+        conversation_id,
+        organization_id,
+        author_id,
+        content,
+        pinned,
+        created_at,
+        updated_at,
+        author:users!notes_author_id_fkey(id, full_name, avatar_url)
+      `)
+      .eq('conversation_id', conversationId)
+      .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
+
     if (error) throw error
-    return (data ?? []).map((r: any) => ({
-      id: r.id,
-      contactId: r.contact_id,
-      content: r.content,
-      createdBy: r.created_by,
-      createdByName: r.user?.full_name,
-      createdAt: r.created_at
-    }))
+    return (data ?? []).map(toConversationNote)
   }
 
+  /**
+   * Crea una nueva nota en una conversación.
+   * @param conversationId UUID de la conversación donde vive la nota.
+   * @param organizationId UUID de la org (requerido por RLS y por NOT NULL).
+   * @param content Texto plano de la nota.
+   * @param authorId UUID del usuario que escribe la nota.
+   */
   async addNote(
-    contactId: string,
+    conversationId: string,
     organizationId: string,
     content: string,
-    userId: string
-  ): Promise<ContactNote> {
+    authorId: string
+  ): Promise<ConversationNote> {
     const { data, error } = await supabase
       .from('notes')
       .insert({
-        contact_id: contactId,
+        conversation_id: conversationId,
         organization_id: organizationId,
+        author_id: authorId,
         content,
-        created_by: userId
+        pinned: false
       })
-      .select().single()
+      .select(`
+        id,
+        conversation_id,
+        organization_id,
+        author_id,
+        content,
+        pinned,
+        created_at,
+        updated_at,
+        author:users!notes_author_id_fkey(id, full_name, avatar_url)
+      `)
+      .single()
+
     if (error) throw error
-    return {
-      id: data.id,
-      contactId: data.contact_id,
-      content: data.content,
-      createdBy: data.created_by,
-      createdAt: data.created_at
-    }
+    return toConversationNote(data)
   }
 
+  /**
+   * Elimina una nota por ID. La RLS asegura que solo el autor
+   * o roles con permiso puedan borrar.
+   */
   async deleteNote(id: string): Promise<void> {
     const { error } = await supabase.from('notes').delete().eq('id', id)
+    if (error) throw error
+  }
+
+  /**
+   * Togglea el flag pinned de una nota. Las notas pinned se listan arriba.
+   */
+  async togglePinNote(id: string, pinned: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('notes')
+      .update({ pinned, updated_at: new Date().toISOString() })
+      .eq('id', id)
     if (error) throw error
   }
 }

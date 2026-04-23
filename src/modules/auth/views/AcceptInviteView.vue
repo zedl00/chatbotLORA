@@ -1,9 +1,14 @@
 <!-- Ruta: /src/modules/auth/views/AcceptInviteView.vue -->
+<!-- ═══════════════════════════════════════════════════════════════
+     MODIFICADO: handleAccept ahora hace un reload completo de la página
+     en lugar de router.push + auth.initialize(), para garantizar que
+     todos los stores (auth, permissions, organization) se inicialicen
+     desde cero con el nuevo usuario.
+     ═══════════════════════════════════════════════════════════════ -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { supabase } from '@/services/supabase.client'
-import { useAuthStore } from '@/stores/auth.store'
 
 interface InviteDetails {
   email: string
@@ -14,8 +19,6 @@ interface InviteDetails {
 }
 
 const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
 
 const token = ref<string>((route.query.token as string) ?? '')
 const details = ref<InviteDetails | null>(null)
@@ -32,7 +35,6 @@ const success = ref(false)
 /**
  * Carga los detalles de la invitación usando la policy pública
  * de la tabla invitations: cualquiera con el token puede leer su propia invitación.
- * (Ver nota en RBAC_INTEGRATION.md sobre la policy adicional necesaria.)
  */
 async function loadInvite() {
   if (!token.value) {
@@ -107,6 +109,7 @@ async function handleAccept() {
 
   submitting.value = true
   try {
+    // 1. Llamar a la Edge Function que crea el usuario y asigna rol
     const { data, error } = await supabase.functions.invoke('user-accept-invite', {
       body: {
         token: token.value,
@@ -117,17 +120,30 @@ async function handleAccept() {
     if (error) throw error
     if (!data?.userId) throw new Error('Respuesta inválida del servidor')
 
+    // 2. Limpiar cualquier sesión anterior antes del nuevo login
+    await supabase.auth.signOut().catch(() => {})
+
+    // 3. Login con el nuevo usuario
+    if (!details.value) {
+      throw new Error('No se pudieron cargar los detalles de la invitación')
+    }
+
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: details.value.email,
+      password: password.value
+    })
+
+    if (loginError) {
+      throw new Error('Usuario creado pero login falló: ' + loginError.message)
+    }
+
+    // 4. Mostrar éxito
     success.value = true
 
-    // Intentar auto-login
-    if (details.value) {
-      await supabase.auth.signInWithPassword({
-        email: details.value.email,
-        password: password.value
-      })
-      await auth.initialize()
-      setTimeout(() => router.push('/admin/dashboard'), 1200)
-    }
+    // 5. Redirigir con reload completo para que los stores se reinicialicen limpio
+    setTimeout(() => {
+      window.location.href = '/admin/dashboard'
+    }, 1500)
   } catch (e) {
     submitError.value = e instanceof Error ? e.message : 'Error al aceptar invitación'
   } finally {

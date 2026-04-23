@@ -1,187 +1,314 @@
-# ChatBot IA Empresarial Omnicanal
+# Sprint 5 — Multi-tenant con subdominios
 
-> **Ruta:** `/README.md`
+Arquitectura completa para que LORA soporte múltiples empresas con sus propios subdominios: `jab.lorachat.net`, `norson.lorachat.net`, `capitali.lorachat.net`, etc.
 
-Panel omnicanal de atención al cliente con IA (Claude de Anthropic), integrado a WhatsApp Business, Instagram DM, Messenger, Telegram y Widget Web.
-
-**Stack:** Vue 3 · Vite · TypeScript · Tailwind CSS · Pinia · Supabase · Claude API
+Incluye también el **wizard del super admin** para crear empresas nuevas sin tocar SQL.
 
 ---
 
-## 📚 Documentación Clave
-
-| Documento | Qué contiene |
-|---|---|
-| [`CONTEXT.md`](./CONTEXT.md) | Visión, principios, estado actual, decisiones técnicas |
-| [`CHANGELOG.md`](./CHANGELOG.md) | Historial de versiones |
-| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Arquitectura técnica en detalle |
-| [`docs/DATABASE.md`](./docs/DATABASE.md) | Schema de base de datos |
-| [`docs/GIT_WORKFLOW.md`](./docs/GIT_WORKFLOW.md) | Flujo Git y convenciones de commits |
-
----
-
-## 🚀 Arranque Local — Paso a Paso
-
-### 1. Requisitos
-
-- **Node.js 20+** ([descargar](https://nodejs.org))
-- **pnpm** o **npm** (se recomienda `pnpm`)
-- **Git**
-- **Supabase CLI** ([guía](https://supabase.com/docs/guides/cli))
-- Cuenta en [Supabase](https://supabase.com)
-- Cuenta en [Anthropic Console](https://console.anthropic.com) para obtener `ANTHROPIC_API_KEY`
-
-### 2. Clonar e Instalar
-
-```bash
-git clone https://github.com/[usuario]/chatbot-ia-empresarial.git
-cd chatbot-ia-empresarial
-pnpm install     # o: npm install
-```
-
-### 3. Configurar Variables de Entorno
-
-```bash
-cp .env.example .env.local
-# Editar .env.local con tus credenciales reales
-```
-
-**NUNCA commitear `.env.local`.** Ver `.gitignore`.
-
-### 4. Crear Proyecto en Supabase
-
-1. Entrar a [app.supabase.com](https://app.supabase.com) → New Project.
-2. Copiar `Project URL` y `anon key` a `.env.local`:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-3. Copiar `service_role key` (solo para Edge Functions) → `SUPABASE_SERVICE_ROLE_KEY`.
-
-### 5. Aplicar Migraciones de Base de Datos
-
-```bash
-# Login en Supabase CLI
-supabase login
-
-# Vincular al proyecto remoto
-supabase link --project-ref <project-ref>
-
-# Aplicar migraciones (crea todas las tablas, RLS, triggers)
-supabase db push
-
-# (Opcional) Cargar datos de prueba
-supabase db reset   # ejecuta migraciones + seed
-```
-
-### 6. Desplegar Edge Functions
-
-```bash
-# Configurar secretos de las funciones
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-supabase secrets set META_WA_ACCESS_TOKEN=...
-supabase secrets set META_APP_SECRET=...
-
-# Desplegar webhook de Meta
-supabase functions deploy meta-webhook
-```
-
-### 7. Correr en Desarrollo
-
-```bash
-pnpm dev    # http://localhost:5173
-```
-
-### 8. Build de Producción
-
-```bash
-pnpm build
-pnpm preview
-```
-
----
-
-## 🧭 Estructura del Proyecto
+## 📦 Archivos incluidos (13)
 
 ```
-chatbot-ia-empresarial/
-├── .github/workflows/     # CI/CD
-├── docs/                  # Documentación técnica
-├── public/                # Assets estáticos
-├── scripts/               # Scripts utilitarios (notion-sync, etc.)
-├── src/
-│   ├── assets/            # Imágenes, fuentes
-│   ├── components/        # UI components (ui/, chat/, admin/, flow/)
-│   ├── composables/       # Lógica reutilizable (useConversations, useAI, ...)
-│   ├── layouts/           # AdminLayout, AuthLayout, WidgetLayout
-│   ├── modules/           # Módulos funcionales (auth, inbox, contacts, ...)
-│   ├── repository/        # ⚡ Capa de abstracción de datos
-│   ├── router/            # Vue Router + guards
-│   ├── services/          # Clientes externos (claude, meta, telegram, ...)
-│   ├── stores/            # Pinia stores
-│   ├── types/             # TypeScript types
-│   └── utils/             # Helpers
+lora-sprint5/
+├── README.md                                                          ← este archivo
+│
 ├── supabase/
-│   ├── functions/         # Edge Functions (Deno)
-│   ├── migrations/        # Migraciones SQL versionadas
-│   └── seed/              # Datos iniciales
-├── widget/                # Widget web embebible (build separado)
-├── CONTEXT.md             # 📌 Visión del proyecto
-├── CHANGELOG.md           # 📌 Historial de versiones
-└── README.md
+│   └── migrations/
+│       └── 20260423_sprint5_functions.sql                             ← RPC atómico + RLS super_admin
+│
+└── src/
+    ├── types/
+    │   └── organization.types.ts                                      ← NUEVO · tipos TS
+    │
+    ├── stores/
+    │   └── organization.store.ts                                      ← NUEVO · Pinia store
+    │
+    ├── composables/
+    │   └── useOrganizationContext.ts                                  ← NUEVO · detector de subdomain
+    │
+    ├── router/
+    │   ├── guards.ts                                                  ← REEMPLAZO · +orgContextGuard, +superAdminGuard
+    │   └── index.ts                                                   ← REEMPLAZO · +ruta super-admin
+    │
+    ├── repository/supabase/
+    │   └── organizations.repo.ts                                      ← NUEVO · CRUD de orgs
+    │
+    ├── layouts/
+    │   └── AdminLayout.vue                                            ← REEMPLAZO · sección LORA Admin + branding dinámico
+    │
+    └── modules/super-admin/
+        ├── views/
+        │   └── OrganizationsView.vue                                  ← NUEVO · lista + acciones
+        └── components/
+            ├── CreateOrganizationWizard.vue                           ← NUEVO · wizard 4 pasos
+            ├── OrganizationCard.vue                                   ← NUEVO · card individual
+            ├── SubdomainInput.vue                                     ← NUEVO · input con validación
+            └── WidgetPreview.vue                                      ← NUEVO · preview en vivo
 ```
 
-> **🔑 Clave:** El directorio `src/repository/` es la capa de abstracción. Ningún componente llama a Supabase directamente — todo pasa por el repositorio. Esto permite migrar de Supabase a otra base de datos sin tocar la lógica de la app.
+---
+
+## 🎯 Qué hace este Sprint
+
+### 1. Detección automática de subdomain
+Cuando alguien entra a `jab.lorachat.net`:
+1. El composable `useOrganizationContext()` detecta `subdomain = "jab"`
+2. El store `organization.store.ts` llama al RPC `get_org_by_subdomain('jab')`
+3. Si existe → carga los datos de Jab, aplica su color primario al CSS
+4. Si no existe → redirige a login con error
+
+### 2. Login contextualizado
+- Super admin entra a cualquier subdomain → **OK**
+- Admin de Jab entra a `jab.lorachat.net` → **OK**
+- Admin de Jab entra a `norson.lorachat.net` → **Acceso denegado** (usuario de otra org)
+
+### 3. Branding dinámico
+Cuando estás en `jab.lorachat.net`:
+- Sidebar del admin muestra **"Jab Enterprises"** en vez de "LORA"
+- Color primario del CSS cambia al de Jab
+- Título de la pestaña: "LORA · Jab Enterprises"
+
+### 4. Wizard del super admin
+Tú (`role = 'super_admin'`) ves una nueva sección **"LORA Admin"** en el sidebar:
+- Click en "Organizaciones" → lista completa de empresas
+- Botón "+ Nueva empresa" → wizard de 4 pasos
+- Al crear: genera org + canal widget + rol admin + invitación en una transacción
+- Resultado: te muestra el link de invitación con botones "Copiar" y "Compartir por WhatsApp"
 
 ---
 
-## 🧪 Scripts Disponibles
+## 🚀 Orden de instalación (5 pasos)
 
-| Comando | Descripción |
+### Paso 1 — Backup (importante)
+
+```powershell
+cd C:\xampp\htdocs\proyectos\chatbot
+
+# Branch de seguridad
+git checkout -b feat/sprint-5-multitenant
+git add -A
+git commit -m "pre-sprint-5 snapshot"
+```
+
+### Paso 2 — Correr migración SQL
+
+1. Abre: https://supabase.com/dashboard/project/imvahmyywbtcfsduwbdq/sql/new
+2. Copia todo el contenido de `supabase/migrations/20260423_sprint5_functions.sql`
+3. Pégalo en el editor
+4. Click en **Run**
+
+**Resultado esperado:** la última query devuelve `count = 4` (las 4 funciones nuevas creadas).
+
+### Paso 3 — Copiar los archivos Vue/TS
+
+Descomprime el ZIP y copia los archivos a sus rutas (todos en `src/`):
+
+| Archivo del ZIP | Destino |
 |---|---|
-| `pnpm dev` | Servidor de desarrollo con HMR |
-| `pnpm build` | Build de producción |
-| `pnpm preview` | Preview del build |
-| `pnpm typecheck` | Revisión de tipos TS |
-| `pnpm lint` | Lint del código |
-| `pnpm format` | Formatear con Prettier |
+| `src/types/organization.types.ts` | Crea nuevo |
+| `src/stores/organization.store.ts` | Crea nuevo |
+| `src/composables/useOrganizationContext.ts` | Crea nuevo |
+| `src/repository/supabase/organizations.repo.ts` | Crea nuevo |
+| `src/router/guards.ts` | **REEMPLAZA el existente** |
+| `src/router/index.ts` | **REEMPLAZA el existente** |
+| `src/layouts/AdminLayout.vue` | **REEMPLAZA el existente** |
+| `src/modules/super-admin/views/OrganizationsView.vue` | Crea nuevo |
+| `src/modules/super-admin/components/CreateOrganizationWizard.vue` | Crea nuevo |
+| `src/modules/super-admin/components/OrganizationCard.vue` | Crea nuevo |
+| `src/modules/super-admin/components/SubdomainInput.vue` | Crea nuevo |
+| `src/modules/super-admin/components/WidgetPreview.vue` | Crea nuevo |
+
+### Paso 4 — Verificar compilación
+
+```powershell
+cd C:\xampp\htdocs\proyectos\chatbot
+
+# Check de TypeScript
+npm run typecheck
+```
+
+Debería terminar sin errores.
+
+Si hay errores de TypeScript, me los pegas y los resolvemos.
+
+### Paso 5 — Build y deploy
+
+```powershell
+npm run build
+```
+
+Sube `/dist` al FTP de `admin.lorachat.net` sobrescribiendo lo existente.
 
 ---
 
-## 🌿 Flujo Git Resumido
+## ✅ Validación post-deploy
 
-Ver [`docs/GIT_WORKFLOW.md`](./docs/GIT_WORKFLOW.md) para el detalle completo.
+### Check 1: Super admin UI visible
 
-- `main` → producción (solo merge vía PR aprobado)
-- `develop` → staging (integración)
-- `feature/<nombre>` → nueva funcionalidad
-- `fix/<nombre>` → corrección
-- `hotfix/<nombre>` → urgencia en producción
+1. Abre `https://admin.lorachat.net` en incógnito
+2. Login con tu cuenta super_admin
+3. En el sidebar, al final, deberías ver una sección **"LORA Admin"** con el ícono 🏢 **"Organizaciones"**
+4. Si no la ves → tu usuario no tiene `role = 'super_admin'` en la tabla `users`
 
-**Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, ...).
+**Para verificar tu rol:**
+```sql
+SELECT id, email, role FROM users WHERE id = auth.uid();
+```
+
+Si `role != 'super_admin'`:
+```sql
+UPDATE users SET role = 'super_admin' WHERE id = 'f8c1ecb6-2230-448b-9508-140e97d5ba5e';
+```
+
+### Check 2: Lista de organizaciones
+
+Click en "Organizaciones". Deberías ver:
+- **Jab Enterprises** (subdomain: jab) — activa
+- **Norson Group** (subdomain: norson) — activa
+
+Con sus métricas de usuarios y conversaciones.
+
+### Check 3: Crear Capitali con el wizard
+
+Click en **+ Nueva empresa** y sigue los 4 pasos:
+
+```
+Paso 1: Nombre = "Capitali" · Email = (opcional, ej: admin@capitali.com)
+Paso 2: Subdomain = "capitali" (debe mostrar ✓ Disponible)
+Paso 3: Color = #10B981 (verde) · Mensaje bienvenida = "Hola! En qué te puedo ayudar?"
+Paso 4: Click en "✨ Crear empresa"
+```
+
+Al final deberías ver:
+- ✅ Modal verde "¡Empresa creada! 🎉"
+- URL: `https://capitali.lorachat.net`
+- Link de invitación copiable
+- Botón "📱 WhatsApp" para compartir
+
+### Check 4: Acceder al subdomain nuevo
+
+Abre en incógnito: `https://capitali.lorachat.net`
+
+Deberías ver:
+- Login de LORA
+- Al entrar con tu cuenta super_admin: sidebar muestra **"Capitali"** con el color verde
+- El título de la pestaña dice "LORA · Capitali"
+
+### Check 5: Aislamiento de datos (RLS)
+
+Desde `https://capitali.lorachat.net`:
+- Vas a Inbox → debe estar **vacío** (Capitali no tiene conversaciones aún)
+- Vas a Canales → hay un canal "Widget Web" pre-creado
+
+Desde `https://jab.lorachat.net`:
+- Vas a Inbox → ves **las conversaciones de Jab**
+
+Confirma que los datos no se cruzan.
 
 ---
 
-## 🧩 Agregar un Nuevo Canal
+## 🐛 Problemas comunes y soluciones
 
-1. Crear `src/services/<canal>.service.ts` implementando la interfaz `ChannelAdapter`.
-2. Crear Edge Function del webhook en `supabase/functions/<canal>-webhook/`.
-3. Insertar registro en tabla `channels`.
-4. Agregar variables de entorno al `.env.example`.
+### Problema 1: "La empresa 'capitali' no existe o está desactivada"
+
+**Causa:** el wildcard DNS no está propagando para ese subdomain, o la org no está en DB.
+
+**Solución:**
+```powershell
+# Verifica DNS
+nslookup capitali.lorachat.net
+
+# Si no existe, espera 5-10 minutos y vuelve a probar
+```
+
+```sql
+-- Verifica la org en DB
+SELECT id, name, subdomain, active FROM organizations WHERE subdomain = 'capitali';
+```
+
+### Problema 2: Error "Solo super_admin puede crear organizaciones"
+
+**Causa:** tu usuario no tiene `role = 'super_admin'` en la tabla `users`.
+
+**Solución:**
+```sql
+UPDATE users SET role = 'super_admin' WHERE id = 'TU_USER_ID';
+```
+
+### Problema 3: "No hay tablas bot_personas" (warning opcional)
+
+La función intenta crear una bot_persona default. Si esa tabla no existe, se salta esa parte. Es esperado.
+
+Si quieres crear una persona default para orgs nuevas en el futuro, verifica que la tabla exista o ajusta la función.
+
+### Problema 4: El branding del tenant no se aplica
+
+**Causa:** El store no carga la org antes de renderizar el layout.
+
+**Solución:** Verifica que `orgStore.applyBrandingToDOM()` se llame en `onMounted` del AdminLayout. Si el problema persiste, revisa que el RPC `get_org_by_subdomain` sea accesible por `anon` (la migración lo configura).
+
+### Problema 5: TypeScript se queja del import de `useDocumentTitle`
+
+Si no tienes ese composable (lo creamos en Sprint 7), reemplaza la línea:
+```typescript
+import { useDocumentTitle } from '@/composables/useDocumentTitle'
+```
+Y la llamada `useDocumentTitle()` con un comentario o elimínalas. Son opcionales.
 
 ---
 
-## 🔐 Seguridad — No Negociable
+## 🎨 Personalización
 
-- Nunca commitear `.env*` con valores reales.
-- Claves de servidor (`ANTHROPIC_API_KEY`, tokens Meta) **nunca** con prefijo `VITE_*`.
-- RLS activado en todas las tablas.
-- Rotar tokens inmediatamente si se exponen.
+### Cambiar el dominio base
+
+Si algún día migras el dominio, edita `src/composables/useOrganizationContext.ts`:
+
+```typescript
+const BASE_DOMAIN = 'lorachat.net'  // ← cambiar aquí
+```
+
+### Agregar subdominios reservados
+
+```sql
+INSERT INTO reserved_subdomains (subdomain, reason)
+VALUES ('nuevo', 'Mi razón');
+```
+
+### Desarrollo local con subdomain simulado
+
+En `.env.local`:
+```
+VITE_DEV_SUBDOMAIN=jab
+```
+
+Reinicia `npm run dev` y la app se comportará como si estuvieras en `jab.lorachat.net`. Útil para probar el flujo tenant sin DNS real.
 
 ---
 
-## 🆘 Soporte / Contacto
+## 📊 Qué NO incluye este Sprint (decisiones futuras)
 
-Ante cualquier duda técnica, documentarla en la tarea de Notion correspondiente y consultarla en el check-in semanal.
+Intencional para no inflar este sprint:
+
+- ❌ **Envío automático de email de invitación** — por ahora copias el link manualmente
+- ❌ **Editar organizaciones existentes** (nombre/color/subdomain) — solo crear/activar/desactivar
+- ❌ **Borrado permanente de organizaciones** — solo soft delete (active=false)
+- ❌ **Subir logos** — URL manual por ahora, upload en Sprint futuro
+- ❌ **Gestión de planes/billing** — el campo `plan` existe pero no hace nada
+- ❌ **Transferencia de datos entre orgs** — no está implementado
+- ❌ **Auto-servicio (clientes creando su propia org)** — solo super_admin crea orgs
 
 ---
 
-**Versión:** 0.1.0 · **Licencia:** Propietaria · **Confidencial**
+## 🗺️ Próximos sprints sugeridos
+
+Una vez este funcione:
+
+1. **Editor de branding por tenant** — para que cada admin pueda editar su propio color/logo
+2. **Email automático de invitación** — setup Resend o Brevo
+3. **Landing page de "sign up"** — auto-servicio para que nuevos clientes se registren
+4. **Billing con Stripe** — cobrar planes
+5. **Telegram como canal adicional** — que faltó del backlog
+
+---
+
+**© 2026 Jab Enterprises · LORA Chat Sprint 5**

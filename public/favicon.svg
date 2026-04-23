@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="lora-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0071E3">
+        <animate attributeName="stop-color"
+          values="#0071E3; #06B6D4; #8B5CF6; #0071E3"
+          dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" stop-color="#06B6D4">
+        <animate attributeName="stop-color"
+          values="#06B6D4; #8B5CF6; #0071E3; #06B6D4"
+          dur="6s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo redondeado -->
+  <rect width="64" height="64" rx="14" fill="url(#lora-bg)"/>
+
+  <!-- Letra L con el punto azul signature -->
+  <g transform="translate(32, 32)">
+    <text x="0" y="10"
+          font-family="Inter Tight, system-ui, sans-serif"
+          font-size="32"
+          font-weight="800"
+          letter-spacing="-1.5"
+          fill="white"
+          text-anchor="middle">L</text>
+    <!-- Punto animado (el "voice mark" de LORA) -->
+    <circle cx="13" cy="10" r="3.5" fill="white">
+      <animate attributeName="opacity"
+        values="1; 0.3; 1"
+        dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

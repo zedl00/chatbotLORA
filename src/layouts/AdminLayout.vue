@@ -1,26 +1,47 @@
 <!-- Ruta: /src/layouts/AdminLayout.vue -->
 <!-- ═══════════════════════════════════════════════════════════════
-     MODIFICADO en Sprint 3 (AI):
-       - Nueva sección "IA" en el menú con Personalidades y Playground.
+     MODIFICADO en Sprint 5 (Multi-tenant):
+       - Nueva sección "LORA Admin" visible solo para role 'super_admin'
+       - Header ahora muestra el nombre/logo de la org activa cuando
+         estamos en un tenant (jab.lorachat.net, norson.lorachat.net, etc.)
+       - Branding dinámico aplicado vía organization.store
      ═══════════════════════════════════════════════════════════════ -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { useUiStore } from '@/stores/ui.store'
 import { useCan } from '@/composables/useCan'
+import { useDocumentTitle } from '@/composables/useDocumentTitle'
+import { useOrganizationStore } from '@/stores/organization.store'
+import LoraLogo from '@/components/LoraLogo.vue'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+const orgStore = useOrganizationStore()
 const router = useRouter()
 const { can } = useCan()
+
+useDocumentTitle()
+
+// Aplicar branding del tenant al DOM cuando cargue
+onMounted(() => {
+  orgStore.applyBrandingToDOM()
+})
+
+// ¿Es super admin? (para mostrar/ocultar la sección LORA Admin)
+const isSuperAdmin = computed(() => authStore.user?.role === 'super_admin')
+
+// ¿Estamos en un subdomain de tenant?
+const isTenantMode = computed(() => orgStore.isTenant && orgStore.current !== null)
 
 interface NavItem {
   to: string
   label: string
   icon: string
-  permission: string
+  permission?: string
   section?: string
+  superAdminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -45,11 +66,19 @@ const navItems: NavItem[] = [
   { to: '/admin/roles',        label: 'Roles',        icon: '🛡️', permission: 'roles.read',    section: 'Administración' },
   { to: '/admin/invitations',  label: 'Invitaciones', icon: '✉️', permission: 'users.invite', section: 'Administración' },
   { to: '/admin/audit',        label: 'Auditoría',    icon: '📋', permission: 'audit.read',   section: 'Administración' },
-  { to: '/admin/settings',     label: 'Configuración',icon: '⚙️', permission: 'settings.read', section: 'Administración' }
+  { to: '/admin/settings',     label: 'Configuración',icon: '⚙️', permission: 'settings.read', section: 'Administración' },
+
+  // 🆕 LORA Admin — solo visible para super_admin
+  { to: '/super-admin/organizations', label: 'Organizaciones', icon: '🏢', section: 'LORA Admin', superAdminOnly: true }
 ]
 
 const visibleNavGrouped = computed(() => {
-  const visible = navItems.filter((item) => can(item.permission))
+  const visible = navItems.filter((item) => {
+    if (item.superAdminOnly && !isSuperAdmin.value) return false
+    if (item.permission && !can(item.permission)) return false
+    return true
+  })
+
   const groups = new Map<string, NavItem[]>()
   groups.set('', [])
 
@@ -63,6 +92,7 @@ const visibleNavGrouped = computed(() => {
 
 async function handleSignOut() {
   await authStore.signOut()
+  orgStore.clear()
   router.push({ name: 'auth.login' })
 }
 </script>
@@ -73,18 +103,54 @@ async function handleSignOut() {
       class="bg-white border-r border-surface-border transition-all flex flex-col"
       :class="uiStore.sidebarCollapsed ? 'w-16' : 'w-64'"
     >
+      <!-- Sidebar header: muestra LoraLogo o branding del tenant -->
       <div class="h-16 flex items-center px-4 border-b border-surface-border">
-        <div class="w-8 h-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
-          C
+        <!-- Colapsado: solo el ícono -->
+        <div
+          v-if="uiStore.sidebarCollapsed"
+          class="w-9 h-9 rounded-xl grid place-items-center"
+          :style="isTenantMode && orgStore.current
+            ? { background: orgStore.primaryColor }
+            : { background: 'linear-gradient(135deg, #0071E3 0%, #06B6D4 50%, #8B5CF6 100%)' }"
+        >
+          <span class="text-white font-bold text-lg" style="letter-spacing: -0.05em;">
+            {{ isTenantMode && orgStore.current
+              ? (orgStore.displayName.charAt(0).toUpperCase())
+              : 'L' }}
+          </span>
         </div>
-        <span v-if="!uiStore.sidebarCollapsed" class="ml-3 font-semibold">LORA ChatBot</span>
+
+        <!-- Expandido: mostrar branding completo -->
+        <template v-else>
+          <!-- Modo tenant: marca de la empresa -->
+          <div v-if="isTenantMode && orgStore.current" class="flex items-center gap-2 min-w-0">
+            <div
+              class="w-8 h-8 rounded-lg grid place-items-center text-white font-bold text-sm flex-shrink-0"
+              :style="{ background: orgStore.primaryColor }"
+            >
+              {{ orgStore.displayName.charAt(0).toUpperCase() }}
+            </div>
+            <div class="min-w-0">
+              <div class="font-semibold text-slate-900 text-sm truncate">
+                {{ orgStore.displayName }}
+              </div>
+              <div class="text-[10px] text-slate-400 truncate">
+                en LORA
+              </div>
+            </div>
+          </div>
+
+          <!-- Modo super admin: logo LORA -->
+          <LoraLogo v-else size="md" variant="dark" />
+        </template>
       </div>
 
       <nav class="flex-1 p-2 overflow-auto">
         <div v-for="[section, items] in visibleNavGrouped" :key="section" class="mb-4">
           <div
             v-if="section && !uiStore.sidebarCollapsed"
-            class="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+            class="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider"
+            :class="section === 'LORA Admin' ? 'text-brand-500' : 'text-slate-400'"
           >
             {{ section }}
           </div>
@@ -119,7 +185,12 @@ async function handleSignOut() {
         <div class="flex items-center gap-4">
           <div class="text-right text-sm">
             <div class="font-medium">{{ authStore.user?.fullName ?? authStore.user?.email }}</div>
-            <div class="text-slate-500 capitalize">{{ authStore.role?.replace('_', ' ') }}</div>
+            <div class="text-slate-500 capitalize text-xs">
+              {{ authStore.role?.replace('_', ' ') }}
+              <span v-if="isSuperAdmin" class="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-brand-100 text-brand-700 font-semibold uppercase tracking-wide">
+                LORA
+              </span>
+            </div>
           </div>
           <button class="btn-secondary" @click="handleSignOut">Salir</button>
         </div>
@@ -130,6 +201,7 @@ async function handleSignOut() {
       </main>
     </div>
 
+    <!-- Toasts -->
     <div class="fixed top-4 right-4 space-y-2 z-50">
       <div
         v-for="t in uiStore.toasts"

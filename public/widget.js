@@ -1,26 +1,29 @@
-// Ruta: /widget/src/widget.js
+// Ruta: /public/widget.js
 // ═══════════════════════════════════════════════════════════════
-// CHATBOT IA — Widget Web embebible
-// Vanilla JS, sin dependencias.
-// Uso:
-//   <script src="https://tudominio.com/widget.js"
+// LORA — Widget Web embebible
+// Chat inteligente omnicanal. Vanilla JS, sin dependencias.
+//
+// Instalación:
+//   <script src="https://admin.lorachat.net/widget.js"
 //           data-channel-id="..."
 //           data-supabase-url="https://xxx.supabase.co"
 //           data-supabase-anon-key="eyJ..."
 //           async></script>
+//
+// Version: 2.0.0 — Rebrand LORA + animaciones + mobile + a11y
 // ═══════════════════════════════════════════════════════════════
 (function() {
   'use strict'
 
-  // Evitar doble carga
-  if (window.__ChatBotIAWidget) return
+  // Evitar doble carga (soporta tanto el namespace viejo como el nuevo durante la migración)
+  if (window.__LoraWidget || window.__ChatBotIAWidget) return
 
   // ───── Leer config del script tag ─────
   const currentScript = document.currentScript ||
     Array.from(document.querySelectorAll('script')).find(s => s.src && s.src.includes('widget.js'))
 
   if (!currentScript) {
-    console.error('[ChatBotIA] No se pudo encontrar el script tag')
+    console.error('[LORA] No se pudo encontrar el script tag')
     return
   }
 
@@ -29,18 +32,30 @@
   const SUPABASE_ANON    = currentScript.getAttribute('data-supabase-anon-key')
 
   if (!CHANNEL_ID || !SUPABASE_URL || !SUPABASE_ANON) {
-    console.error('[ChatBotIA] Faltan atributos: data-channel-id, data-supabase-url, data-supabase-anon-key')
+    console.error('[LORA] Faltan atributos: data-channel-id, data-supabase-url, data-supabase-anon-key')
     return
   }
 
-  // ───── Estado ─────
-  const LS_VISITOR_KEY = `chatbotia_visitor_${CHANNEL_ID}`
+  // ───── Migración suave del storage key ─────
+  // Después de 60 días en producción se puede eliminar este bloque.
+  const LS_VISITOR_KEY = `lora_visitor_${CHANNEL_ID}`
+  const OLD_VISITOR_KEY = `chatbotia_visitor_${CHANNEL_ID}`
   let visitorId = localStorage.getItem(LS_VISITOR_KEY)
+
   if (!visitorId) {
-    visitorId = crypto.randomUUID ? crypto.randomUUID() : ('v-' + Math.random().toString(36).slice(2) + Date.now())
-    localStorage.setItem(LS_VISITOR_KEY, visitorId)
+    // Intentar migrar desde la llave vieja
+    const oldId = localStorage.getItem(OLD_VISITOR_KEY)
+    if (oldId) {
+      visitorId = oldId
+      localStorage.setItem(LS_VISITOR_KEY, visitorId)
+      localStorage.removeItem(OLD_VISITOR_KEY)
+    } else {
+      visitorId = crypto.randomUUID ? crypto.randomUUID() : ('v-' + Math.random().toString(36).slice(2) + Date.now())
+      localStorage.setItem(LS_VISITOR_KEY, visitorId)
+    }
   }
 
+  // ───── Estado ─────
   const state = {
     open: false,
     config: null,
@@ -49,7 +64,8 @@
     messages: [],
     sending: false,
     preChatDone: false,
-    realtimeChannel: null
+    realtimeChannel: null,
+    unreadCount: 0
   }
 
   // ───── Helpers ─────
@@ -74,6 +90,36 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '')
+    const r = parseInt(h.substring(0, 2), 16)
+    const g = parseInt(h.substring(2, 4), 16)
+    const b = parseInt(h.substring(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  // Lighten/darken hex color by a factor (-1 to 1)
+  function adjustColor(hex, factor) {
+    const h = hex.replace('#', '')
+    let r = parseInt(h.substring(0, 2), 16)
+    let g = parseInt(h.substring(2, 4), 16)
+    let b = parseInt(h.substring(4, 6), 16)
+
+    if (factor > 0) {
+      r = Math.round(r + (255 - r) * factor)
+      g = Math.round(g + (255 - g) * factor)
+      b = Math.round(b + (255 - b) * factor)
+    } else {
+      r = Math.round(r * (1 + factor))
+      g = Math.round(g * (1 + factor))
+      b = Math.round(b * (1 + factor))
+    }
+
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
   }
 
   // ───── Init ─────
@@ -107,7 +153,7 @@
       // Suscribirse a realtime si hay conversación
       if (state.conversationId) subscribeRealtime()
     } catch (e) {
-      console.error('[ChatBotIA] Init error:', e)
+      console.error('[LORA] Init error:', e)
     }
   }
 
@@ -118,24 +164,16 @@
 
   // ───── Realtime ─────
   async function subscribeRealtime() {
-    console.log('[CBI-DEBUG] subscribeRealtime START. conversationId:', state.conversationId, 'already:', !!state.realtimeChannel)
-    if (state.realtimeChannel || !state.conversationId) {
-      console.log('[CBI-DEBUG] subscribeRealtime SKIPPED')
-      return
-    }
+    if (state.realtimeChannel || !state.conversationId) return
 
     try {
       if (!window.supabase) {
-        console.log('[CBI-DEBUG] Loading supabase-js...')
         await loadSupabaseJS()
-        console.log('[CBI-DEBUG] supabase-js loaded')
       }
 
       const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
         realtime: { params: { eventsPerSecond: 10 } }
       })
-
-      console.log('[CBI-DEBUG] Subscribing to channel widget-conv-' + state.conversationId)
 
       const channel = client
         .channel(`widget-conv-${state.conversationId}`)
@@ -145,10 +183,8 @@
           table: 'messages',
           filter: `conversation_id=eq.${state.conversationId}`
         }, (payload) => {
-          console.log('[CBI-DEBUG] 🔔 MESSAGE RECEIVED:', payload)
           const msg = payload.new
           if (msg.sender_type !== 'contact' && !state.messages.find(m => m.id === msg.id)) {
-            console.log('[CBI-DEBUG] Adding to UI')
             state.messages.push({
               id: msg.id,
               sender_type: msg.sender_type,
@@ -158,18 +194,13 @@
             renderMessages()
             scrollToBottom()
             if (!state.open) notify()
-          } else {
-            console.log('[CBI-DEBUG] Skipped - is own or duplicate')
           }
         })
-        .subscribe((status, err) => {
-          console.log('[CBI-DEBUG] ⚡ Subscription status:', status, err || '')
-        })
+        .subscribe()
 
       state.realtimeChannel = channel
-      console.log('[CBI-DEBUG] Channel saved to state')
     } catch (e) {
-      console.warn('[CBI-DEBUG] Subscribe FAILED:', e)
+      console.warn('[LORA] Realtime unavailable, falling back to polling:', e)
       startPolling()
     }
   }
@@ -220,7 +251,7 @@
     state.messages.push(optimisticMsg)
     renderMessages()
     scrollToBottom()
-    renderInput()  // desactivar input
+    renderInput()
 
     try {
       const result = await api('widget-message', {
@@ -263,12 +294,11 @@
       renderMessages()
       scrollToBottom()
     } catch (e) {
-      // Marcar optimistic como fallido
       const idx = state.messages.findIndex(m => m.id === optimisticMsg.id)
       if (idx >= 0) {
         state.messages[idx].failed = true
       }
-      console.error('[ChatBotIA] Error enviando:', e)
+      console.error('[LORA] Error enviando:', e)
       renderMessages()
     } finally {
       state.sending = false
@@ -292,151 +322,486 @@
     }
   }
 
-  // ───── UI: inyectar estilos ─────
+  // ───── UI: inyectar estilos premium ─────
   function injectStyles() {
-    if (document.getElementById('chatbotia-styles')) return
+    if (document.getElementById('lora-styles')) return
     const c = state.config
+    const primary = c.primaryColor || '#0071E3'
+    const primaryDark = adjustColor(primary, -0.15)
+    const primaryLight = adjustColor(primary, 0.1)
+
     const style = document.createElement('style')
-    style.id = 'chatbotia-styles'
+    style.id = 'lora-styles'
     style.textContent = `
-      .cbi-root { position: fixed; z-index: 2147483000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-      .cbi-pos-br { bottom: 20px; right: 20px; }
-      .cbi-pos-bl { bottom: 20px; left: 20px; }
+      /* LORA Widget v2.0 — Premium styles */
+      .lora-root {
+        position: fixed;
+        z-index: 2147483000;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-feature-settings: 'ss01','cv11';
+        -webkit-font-smoothing: antialiased;
+      }
+      .lora-root *, .lora-root *::before, .lora-root *::after {
+        box-sizing: border-box;
+      }
+      .lora-pos-br { bottom: 20px; right: 20px; }
+      .lora-pos-bl { bottom: 20px; left: 20px; }
 
-      .cbi-launcher {
-        width: 60px; height: 60px; border-radius: 50%;
-        background: ${c.primaryColor};
-        box-shadow: 0 4px 24px rgba(0,0,0,0.16);
+      /* ═══ LAUNCHER ═══ */
+      .lora-launcher {
+        width: 60px; height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        box-shadow:
+          0 8px 24px ${hexToRgba(primary, 0.35)},
+          0 2px 6px rgba(0, 0, 0, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
         display: flex; align-items: center; justify-content: center;
-        color: white; font-size: 26px; cursor: pointer; border: none;
-        transition: transform 0.2s;
+        color: white;
+        font-size: 26px;
+        cursor: pointer;
+        border: none;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: lora-launcher-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        outline: none;
       }
-      .cbi-launcher:hover { transform: scale(1.06); }
-      .cbi-launcher.cbi-notify::after {
-        content: ''; position: absolute; top: 4px; right: 4px;
-        width: 12px; height: 12px; border-radius: 50%;
-        background: #ef4444; border: 2px solid white;
+      .lora-launcher:hover {
+        transform: scale(1.08) translateY(-2px);
+        box-shadow:
+          0 12px 32px ${hexToRgba(primary, 0.45)},
+          0 4px 10px rgba(0, 0, 0, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+      .lora-launcher:active { transform: scale(1.02) translateY(0); }
+      .lora-launcher:focus-visible {
+        box-shadow:
+          0 8px 24px ${hexToRgba(primary, 0.35)},
+          0 0 0 3px white,
+          0 0 0 5px ${primary};
+      }
+      @keyframes lora-launcher-in {
+        0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+        60% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+        100% { transform: scale(1) rotate(0); opacity: 1; }
       }
 
-      .cbi-panel {
-        position: absolute; bottom: 80px;
-        width: 380px; max-width: calc(100vw - 40px);
-        height: 560px; max-height: calc(100vh - 120px);
-        background: white; border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.16);
-        display: flex; flex-direction: column; overflow: hidden;
+      /* Unread badge */
+      .lora-launcher .lora-badge {
+        position: absolute;
+        top: -2px; right: -2px;
+        min-width: 20px; height: 20px;
+        border-radius: 10px;
+        background: #ef4444;
+        border: 2px solid white;
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'Inter', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 5px;
+        animation: lora-badge-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
-      .cbi-pos-br .cbi-panel { right: 0; }
-      .cbi-pos-bl .cbi-panel { left: 0; }
+      @keyframes lora-badge-in {
+        from { transform: scale(0); }
+        to { transform: scale(1); }
+      }
 
-      .cbi-header {
-        background: ${c.primaryColor};
-        color: white; padding: 16px 18px;
-        display: flex; align-items: center; gap: 12px;
+      /* ═══ PANEL ═══ */
+      .lora-panel {
+        position: absolute;
+        bottom: 80px;
+        width: 380px;
+        max-width: calc(100vw - 40px);
+        height: 680px;
+        max-height: calc(100vh - 80px);
+        background: white;
+        border-radius: 20px;
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.15),
+          0 4px 16px rgba(0, 0, 0, 0.06),
+          0 0 0 1px rgba(0, 0, 0, 0.04);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transform-origin: bottom right;
+        animation: lora-panel-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      .cbi-header-logo {
-        width: 36px; height: 36px; border-radius: 50%;
-        background: rgba(255,255,255,0.2);
+      .lora-pos-br .lora-panel { right: 0; transform-origin: bottom right; }
+      .lora-pos-bl .lora-panel { left: 0; transform-origin: bottom left; }
+
+      @keyframes lora-panel-in {
+        from { opacity: 0; transform: scale(0.92) translateY(20px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      /* ═══ HEADER ═══ */
+      .lora-header {
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        color: white;
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+      .lora-header::before {
+        content: '';
+        position: absolute;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: radial-gradient(circle at 70% 30%, ${hexToRgba('#ffffff', 0.15)} 0%, transparent 50%);
+        pointer-events: none;
+      }
+      .lora-header > * { position: relative; z-index: 1; }
+
+      .lora-header-logo {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      .lora-header-title {
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+      .lora-header-subtitle {
+        opacity: 0.85;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+      }
+      .lora-header-subtitle::before {
+        content: '';
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 8px #4ade80;
+      }
+      .lora-close {
+        margin-left: auto;
+        background: transparent;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 20px;
+        opacity: 0.8;
+        width: 32px; height: 32px;
+        border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-size: 18px; flex-shrink: 0;
+        transition: all 0.2s;
       }
-      .cbi-header-title { font-weight: 600; font-size: 15px; }
-      .cbi-header-subtitle { opacity: 0.9; font-size: 12px; }
-      .cbi-close {
-        margin-left: auto; background: transparent; border: none;
-        color: white; cursor: pointer; font-size: 20px; opacity: 0.8;
+      .lora-close:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.15);
       }
-      .cbi-close:hover { opacity: 1; }
-
-      .cbi-body {
-        flex: 1; overflow-y: auto; padding: 16px;
-        background: #f8fafc; display: flex; flex-direction: column; gap: 10px;
+      .lora-close:focus-visible {
+        outline: 2px solid white;
+        outline-offset: 2px;
       }
 
-      .cbi-welcome {
-        text-align: center; padding: 20px 8px;
+      /* ═══ BODY ═══ */
+      .lora-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 16px;
+        background: #fafafa;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        scroll-behavior: smooth;
       }
-      .cbi-welcome-title { font-size: 18px; font-weight: 600; color: #0f172a; }
-      .cbi-welcome-sub { color: #64748b; font-size: 14px; margin-top: 6px; }
-
-      .cbi-msg { max-width: 85%; }
-      .cbi-msg-contact { align-self: flex-end; }
-      .cbi-msg-bot, .cbi-msg-agent, .cbi-msg-system { align-self: flex-start; }
-
-      .cbi-bubble {
-        padding: 9px 13px; border-radius: 14px; font-size: 14px;
-        line-height: 1.45; word-wrap: break-word; white-space: pre-wrap;
+      .lora-body::-webkit-scrollbar { width: 6px; }
+      .lora-body::-webkit-scrollbar-track { background: transparent; }
+      .lora-body::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 3px;
       }
-      .cbi-msg-contact .cbi-bubble {
-        background: ${c.primaryColor}; color: white;
+
+      /* ═══ WELCOME ═══ */
+      .lora-welcome {
+        text-align: center;
+        padding: 32px 16px;
+        animation: lora-fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .lora-welcome-icon {
+        width: 56px; height: 56px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 24px;
+        box-shadow: 0 8px 24px ${hexToRgba(primary, 0.25)};
+      }
+      .lora-welcome-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+      .lora-welcome-sub {
+        color: #64748b;
+        font-size: 14px;
+        margin-top: 8px;
+        line-height: 1.5;
+      }
+
+      /* ═══ MESSAGES ═══ */
+      .lora-msg {
+        max-width: 85%;
+        animation: lora-msg-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes lora-msg-in {
+        from { opacity: 0; transform: translateY(6px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes lora-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .lora-msg-contact { align-self: flex-end; }
+      .lora-msg-bot,
+      .lora-msg-agent,
+      .lora-msg-system { align-self: flex-start; }
+
+      .lora-bubble {
+        padding: 10px 14px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.5;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        letter-spacing: -0.005em;
+      }
+      .lora-msg-contact .lora-bubble {
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        color: white;
         border-bottom-right-radius: 4px;
+        box-shadow: 0 2px 8px ${hexToRgba(primary, 0.2)};
       }
-      .cbi-msg-bot .cbi-bubble, .cbi-msg-agent .cbi-bubble {
-        background: white; color: #0f172a;
-        border: 1px solid #e2e8f0;
+      .lora-msg-bot .lora-bubble,
+      .lora-msg-agent .lora-bubble {
+        background: white;
+        color: #0f172a;
+        border: 1px solid #e5e7eb;
         border-bottom-left-radius: 4px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
       }
-      .cbi-msg-system .cbi-bubble {
-        background: #fef3c7; color: #78350f;
-        font-size: 12px; text-align: center;
+      .lora-msg-system .lora-bubble {
+        background: ${hexToRgba(primary, 0.08)};
+        color: ${primaryDark};
+        font-size: 12px;
+        text-align: center;
+        border-radius: 10px;
+        padding: 8px 14px;
+        max-width: 100%;
+      }
+      .lora-msg-failed .lora-bubble {
+        opacity: 0.55;
+        border: 1px dashed #ef4444;
       }
 
-      .cbi-msg-failed .cbi-bubble {
-        opacity: 0.6; border: 1px dashed #ef4444;
-      }
-
-      .cbi-typing {
+      /* ═══ TYPING INDICATOR ═══ */
+      .lora-typing {
         align-self: flex-start;
-        background: white; border: 1px solid #e2e8f0;
-        padding: 12px 14px; border-radius: 14px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        padding: 13px 16px;
+        border-radius: 16px;
         border-bottom-left-radius: 4px;
-        display: flex; gap: 4px;
+        display: flex;
+        gap: 5px;
+        animation: lora-msg-in 0.3s;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
       }
-      .cbi-typing span {
-        width: 6px; height: 6px; border-radius: 50%;
-        background: #94a3b8;
-        animation: cbi-blink 1.4s infinite both;
+      .lora-typing span {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: ${primary};
+        animation: lora-typing-bounce 1.4s infinite both;
       }
-      .cbi-typing span:nth-child(2) { animation-delay: 0.2s; }
-      .cbi-typing span:nth-child(3) { animation-delay: 0.4s; }
-      @keyframes cbi-blink { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
-
-      .cbi-input-area {
-        padding: 10px 12px; border-top: 1px solid #e2e8f0;
-        display: flex; gap: 8px; background: white;
-      }
-      .cbi-input {
-        flex: 1; border: 1px solid #e2e8f0; border-radius: 12px;
-        padding: 10px 12px; font-size: 14px; outline: none;
-        font-family: inherit; resize: none;
-      }
-      .cbi-input:focus { border-color: ${c.primaryColor}; }
-      .cbi-send {
-        background: ${c.primaryColor}; color: white;
-        border: none; border-radius: 12px;
-        padding: 0 16px; cursor: pointer; font-size: 16px;
-      }
-      .cbi-send:disabled { opacity: 0.5; cursor: not-allowed; }
-
-      .cbi-powered {
-        text-align: center; font-size: 11px; color: #94a3b8;
-        padding: 6px; background: white; border-top: 1px solid #f1f5f9;
+      .lora-typing span:nth-child(1) { animation-delay: 0s; }
+      .lora-typing span:nth-child(2) { animation-delay: 0.15s; }
+      .lora-typing span:nth-child(3) { animation-delay: 0.3s; }
+      @keyframes lora-typing-bounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+        30% { transform: translateY(-5px); opacity: 1; }
       }
 
-      .cbi-prechat {
-        padding: 20px; display: flex; flex-direction: column; gap: 10px;
+      /* ═══ INPUT AREA ═══ */
+      .lora-input-area {
+        padding: 12px 14px;
+        border-top: 1px solid #f1f5f9;
+        display: flex;
+        gap: 8px;
+        background: white;
+        align-items: flex-end;
       }
-      .cbi-prechat-msg { color: #475569; font-size: 14px; margin-bottom: 6px; }
-      .cbi-prechat input {
-        width: 100%; box-sizing: border-box;
-        padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px;
-        font-size: 14px; outline: none; font-family: inherit;
+      .lora-input {
+        flex: 1;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 10px 14px;
+        font-size: 14px;
+        font-family: inherit;
+        line-height: 1.5;
+        outline: none;
+        resize: none;
+        max-height: 100px;
+        transition: border-color 0.2s, box-shadow 0.2s;
       }
-      .cbi-prechat input:focus { border-color: ${c.primaryColor}; }
-      .cbi-prechat button {
-        background: ${c.primaryColor}; color: white; border: none;
-        padding: 11px; border-radius: 10px; cursor: pointer;
-        font-size: 14px; font-weight: 600; margin-top: 4px;
+      .lora-input:focus {
+        border-color: ${primary};
+        box-shadow: 0 0 0 3px ${hexToRgba(primary, 0.1)};
+      }
+      .lora-send {
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 40px; height: 40px;
+        flex-shrink: 0;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 2px 8px ${hexToRgba(primary, 0.25)};
+      }
+      .lora-send:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px ${hexToRgba(primary, 0.35)};
+      }
+      .lora-send:active:not(:disabled) { transform: scale(0.95); }
+      .lora-send:disabled { opacity: 0.4; cursor: not-allowed; }
+      .lora-send:focus-visible {
+        outline: 2px solid ${primary};
+        outline-offset: 2px;
+      }
+
+      /* ═══ POWERED BY ═══ */
+      .lora-powered {
+        text-align: center;
+        font-size: 10px;
+        color: #94a3b8;
+        padding: 6px;
+        background: white;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+      .lora-powered a {
+        color: #64748b;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.2s;
+      }
+      .lora-powered a:hover { color: ${primary}; }
+
+      /* ═══ PRE-CHAT FORM ═══ */
+      .lora-prechat {
+        flex: 1;
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow-y: auto;
+        background: #fafafa;
+      }
+      .lora-prechat-icon {
+        width: 48px; height: 48px;
+        margin: 8px auto 4px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px;
+        box-shadow: 0 6px 18px ${hexToRgba(primary, 0.25)};
+      }
+      .lora-prechat-msg {
+        color: #475569;
+        font-size: 14px;
+        text-align: center;
+        line-height: 1.5;
+        margin-bottom: 8px;
+      }
+      .lora-prechat input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 14px;
+        font-family: inherit;
+        outline: none;
+        background: white;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .lora-prechat input:focus {
+        border-color: ${primary};
+        box-shadow: 0 0 0 3px ${hexToRgba(primary, 0.1)};
+      }
+      .lora-prechat button {
+        background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);
+        color: white;
+        border: none;
+        padding: 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 6px;
+        font-family: inherit;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 12px ${hexToRgba(primary, 0.25)};
+      }
+      .lora-prechat button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px ${hexToRgba(primary, 0.35)};
+      }
+
+      /* ═══ MOBILE ═══ */
+      @media (max-width: 480px) {
+        .lora-pos-br, .lora-pos-bl { bottom: 16px; right: 16px; left: auto; }
+        .lora-pos-bl { right: auto; left: 16px; }
+        .lora-panel {
+          position: fixed;
+          bottom: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          top: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          max-width: none !important;
+          max-height: none !important;
+          border-radius: 0;
+          transform-origin: center bottom;
+        }
+        .lora-input { font-size: 16px; /* evita zoom en iOS */ }
+      }
+
+      /* ═══ REDUCED MOTION ═══ */
+      @media (prefers-reduced-motion: reduce) {
+        .lora-launcher,
+        .lora-panel,
+        .lora-msg,
+        .lora-typing,
+        .lora-welcome {
+          animation: none !important;
+        }
+        .lora-launcher:hover { transform: scale(1.04); }
       }
     `
     document.head.appendChild(style)
@@ -448,35 +813,58 @@
     if (!state.config) return
     if (!root) {
       root = document.createElement('div')
-      root.className = `cbi-root cbi-pos-${state.config.position === 'bottom-left' ? 'bl' : 'br'}`
+      root.className = `lora-root lora-pos-${state.config.position === 'bottom-left' ? 'bl' : 'br'}`
       document.body.appendChild(root)
     }
 
+    const badgeHtml = state.unreadCount > 0
+      ? `<span class="lora-badge" aria-label="${state.unreadCount} mensajes sin leer">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>`
+      : ''
+
     root.innerHTML = `
-      <button class="cbi-launcher" id="cbi-launcher">
-        ${state.config.launcherIcon || '💬'}
+      <button class="lora-launcher" id="lora-launcher"
+              aria-label="${state.open ? 'Cerrar chat' : 'Abrir chat'}"
+              aria-expanded="${state.open}">
+        <span aria-hidden="true">${escapeHtml(state.config.launcherIcon || '💬')}</span>
+        ${badgeHtml}
       </button>
       ${state.open ? renderPanel() : ''}
     `
 
-    document.getElementById('cbi-launcher').onclick = () => {
-      state.open = !state.open
-      render()
-      if (state.open) {
-        clearNotify()
-        setTimeout(scrollToBottom, 50)
-      }
-    }
+    document.getElementById('lora-launcher').onclick = toggleOpen
 
     if (state.open) {
-      const closeBtn = document.getElementById('cbi-close')
-      if (closeBtn) closeBtn.onclick = () => { state.open = false; render() }
+      const closeBtn = document.getElementById('lora-close')
+      if (closeBtn) closeBtn.onclick = toggleOpen
 
       if (needsPreChat() && !state.preChatDone) {
         bindPreChatForm()
       } else {
         bindInput()
       }
+
+      // Escape cierra el panel (accessibility)
+      document.addEventListener('keydown', handleEscape)
+    } else {
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }
+
+  function handleEscape(e) {
+    if (e.key === 'Escape' && state.open) {
+      state.open = false
+      render()
+    }
+  }
+
+  function toggleOpen() {
+    state.open = !state.open
+    if (state.open) {
+      clearNotify()
+    }
+    render()
+    if (state.open) {
+      setTimeout(scrollToBottom, 50)
     }
   }
 
@@ -485,35 +873,46 @@
     const showPreChat = needsPreChat() && !state.preChatDone
 
     return `
-      <div class="cbi-panel">
-        <div class="cbi-header">
-          <div class="cbi-header-logo">
+      <div class="lora-panel" role="dialog" aria-label="Chat con ${escapeHtml(c.brandName)}">
+        <div class="lora-header">
+          <div class="lora-header-logo">
             ${c.logoUrl
-              ? `<img src="${c.logoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" />`
-              : (c.launcherIcon || '🤖')}
+              ? `<img src="${escapeHtml(c.logoUrl)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover" />`
+              : `<span aria-hidden="true">${escapeHtml(c.launcherIcon || '🤖')}</span>`}
           </div>
           <div>
-            <div class="cbi-header-title">${escapeHtml(c.brandName)}</div>
-            <div class="cbi-header-subtitle">En línea</div>
+            <div class="lora-header-title">${escapeHtml(c.brandName)}</div>
+            <div class="lora-header-subtitle">En línea · Responde rápido</div>
           </div>
-          <button class="cbi-close" id="cbi-close">✕</button>
+          <button class="lora-close" id="lora-close" aria-label="Cerrar chat">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
         ${showPreChat ? renderPreChat() : renderChat()}
-        ${c.showPoweredBy ? '<div class="cbi-powered">Powered by ChatBot IA</div>' : ''}
+        ${c.showPoweredBy ? renderPoweredBy() : ''}
       </div>
     `
+  }
+
+  function renderPoweredBy() {
+    return `<div class="lora-powered">
+      <a href="https://lorachat.net" target="_blank" rel="noopener noreferrer">LORA</a>
+    </div>`
   }
 
   function renderPreChat() {
     const c = state.config
     return `
-      <div class="cbi-prechat">
-        <div class="cbi-prechat-msg">${escapeHtml(c.preChatMessage)}</div>
-        <form id="cbi-prechat-form">
-          ${c.requireName  ? '<input type="text"  name="name"  placeholder="Tu nombre" required />' : ''}
-          ${c.requireEmail ? '<input type="email" name="email" placeholder="Tu email" required />' : ''}
-          ${c.requirePhone ? '<input type="tel"   name="phone" placeholder="Tu teléfono" required />' : ''}
-          <button type="submit">Iniciar conversación</button>
+      <div class="lora-prechat">
+        <div class="lora-prechat-icon"><span aria-hidden="true">👋</span></div>
+        <div class="lora-prechat-msg">${escapeHtml(c.preChatMessage || '¡Hola! Antes de empezar, cuéntanos un poco sobre ti.')}</div>
+        <form id="lora-prechat-form">
+          ${c.requireName  ? '<input type="text"  name="name"  placeholder="Tu nombre" autocomplete="name" required />' : ''}
+          ${c.requireEmail ? '<input type="email" name="email" placeholder="Tu email" autocomplete="email" required />' : ''}
+          ${c.requirePhone ? '<input type="tel"   name="phone" placeholder="Tu teléfono" autocomplete="tel" required />' : ''}
+          <button type="submit">Iniciar conversación →</button>
         </form>
       </div>
     `
@@ -521,62 +920,77 @@
 
   function renderChat() {
     return `
-      <div class="cbi-body" id="cbi-body">
+      <div class="lora-body" id="lora-body" role="log" aria-live="polite">
         ${state.messages.length === 0 ? `
-          <div class="cbi-welcome">
-            <div class="cbi-welcome-title">${escapeHtml(state.config.welcomeTitle)}</div>
-            <div class="cbi-welcome-sub">${escapeHtml(state.config.welcomeSubtitle)}</div>
+          <div class="lora-welcome">
+            <div class="lora-welcome-icon"><span aria-hidden="true">${escapeHtml(state.config.launcherIcon || '👋')}</span></div>
+            <div class="lora-welcome-title">${escapeHtml(state.config.welcomeTitle)}</div>
+            <div class="lora-welcome-sub">${escapeHtml(state.config.welcomeSubtitle)}</div>
           </div>
         ` : renderMessagesHtml()}
-        ${state.sending ? '<div class="cbi-typing"><span></span><span></span><span></span></div>' : ''}
+        ${state.sending ? '<div class="lora-typing" aria-label="Escribiendo"><span></span><span></span><span></span></div>' : ''}
       </div>
-      <div class="cbi-input-area">
-        <textarea class="cbi-input" id="cbi-input" rows="1"
+      <div class="lora-input-area">
+        <textarea class="lora-input" id="lora-input" rows="1"
           placeholder="${escapeHtml(state.config.inputPlaceholder)}"
+          aria-label="Escribe tu mensaje"
           ${state.sending ? 'disabled' : ''}></textarea>
-        <button class="cbi-send" id="cbi-send" ${state.sending ? 'disabled' : ''}>→</button>
+        <button class="lora-send" id="lora-send" aria-label="Enviar mensaje" ${state.sending ? 'disabled' : ''}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
     `
   }
 
   function renderMessagesHtml() {
     return state.messages.map(m => {
-      const cls = `cbi-msg cbi-msg-${m.sender_type}${m.failed ? ' cbi-msg-failed' : ''}`
-      return `<div class="${cls}"><div class="cbi-bubble">${escapeHtml(m.content)}</div></div>`
+      const cls = `lora-msg lora-msg-${m.sender_type}${m.failed ? ' lora-msg-failed' : ''}`
+      return `<div class="${cls}"><div class="lora-bubble">${escapeHtml(m.content)}</div></div>`
     }).join('')
   }
 
   function renderMessages() {
-    const body = document.getElementById('cbi-body')
+    const body = document.getElementById('lora-body')
     if (!body) return
     body.innerHTML = state.messages.length === 0 ? `
-      <div class="cbi-welcome">
-        <div class="cbi-welcome-title">${escapeHtml(state.config.welcomeTitle)}</div>
-        <div class="cbi-welcome-sub">${escapeHtml(state.config.welcomeSubtitle)}</div>
+      <div class="lora-welcome">
+        <div class="lora-welcome-icon"><span aria-hidden="true">${escapeHtml(state.config.launcherIcon || '👋')}</span></div>
+        <div class="lora-welcome-title">${escapeHtml(state.config.welcomeTitle)}</div>
+        <div class="lora-welcome-sub">${escapeHtml(state.config.welcomeSubtitle)}</div>
       </div>
     ` : renderMessagesHtml()
     if (state.sending) {
-      body.innerHTML += '<div class="cbi-typing"><span></span><span></span><span></span></div>'
+      body.innerHTML += '<div class="lora-typing" aria-label="Escribiendo"><span></span><span></span><span></span></div>'
     }
   }
 
   function renderInput() {
-    const input = document.getElementById('cbi-input')
-    const send = document.getElementById('cbi-send')
+    const input = document.getElementById('lora-input')
+    const send = document.getElementById('lora-send')
     if (input) input.disabled = state.sending
     if (send) send.disabled = state.sending
     if (input && !state.sending) input.focus()
   }
 
   function bindInput() {
-    const input = document.getElementById('cbi-input')
-    const send = document.getElementById('cbi-send')
+    const input = document.getElementById('lora-input')
+    const send = document.getElementById('lora-send')
     if (!input || !send) return
+
+    // Auto-resize
+    const autoResize = () => {
+      input.style.height = 'auto'
+      input.style.height = Math.min(input.scrollHeight, 100) + 'px'
+    }
+    input.addEventListener('input', autoResize)
 
     const doSend = () => {
       const txt = input.value.trim()
       if (!txt) return
       input.value = ''
+      input.style.height = 'auto'
       sendMessage(txt)
     }
 
@@ -591,7 +1005,7 @@
   }
 
   function bindPreChatForm() {
-    const form = document.getElementById('cbi-prechat-form')
+    const form = document.getElementById('lora-prechat-form')
     if (!form) return
     form.onsubmit = (e) => {
       e.preventDefault()
@@ -601,22 +1015,23 @@
   }
 
   function scrollToBottom() {
-    const body = document.getElementById('cbi-body')
+    const body = document.getElementById('lora-body')
     if (body) body.scrollTop = body.scrollHeight
   }
 
   function notify() {
-    const launcher = document.getElementById('cbi-launcher')
-    if (launcher) launcher.classList.add('cbi-notify')
+    state.unreadCount++
+    render()
   }
 
   function clearNotify() {
-    const launcher = document.getElementById('cbi-launcher')
-    if (launcher) launcher.classList.remove('cbi-notify')
+    state.unreadCount = 0
   }
 
   // ───── Marcar como cargado y arrancar ─────
-  window.__ChatBotIAWidget = { state, version: '1.0.0' }
+  window.__LoraWidget = { state, version: '2.0.0' }
+  // Alias de compatibilidad con el nombre viejo durante la migración
+  window.__ChatBotIAWidget = window.__LoraWidget
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)

@@ -1,9 +1,9 @@
 <!-- Ruta: /src/modules/inbox/components/ContactPanel.vue -->
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { SupabaseInboxRepo } from '@/repository/supabase/inbox.repo'
-import type { InboxConversation, ContactNote } from '@/types/inbox.types'
+import type { InboxConversation, ConversationNote } from '@/types/inbox.types'
 import { formatDateTime, initials } from '@/utils/format'
 
 const props = defineProps<{ conversation: InboxConversation }>()
@@ -12,46 +12,91 @@ const emit = defineEmits<{ (e: 'updated'): void }>()
 const auth = useAuthStore()
 const repo = new SupabaseInboxRepo()
 
-const notes = ref<ContactNote[]>([])
+const notes = ref<ConversationNote[]>([])
 const newNote = ref('')
 const addingNote = ref(false)
+const loadingNotes = ref(false)
 const newTag = ref('')
+const saveFeedback = ref<'idle' | 'saved' | 'error'>('idle')
+
+// Ordenar notas: pinned primero, luego por fecha desc
+const sortedNotes = computed(() => {
+  return [...notes.value].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+})
 
 async function loadNotes() {
-  if (!props.conversation.contactId) return
-  notes.value = await repo.listNotes(props.conversation.contactId)
+  // Las notas ahora son POR CONVERSACIÓN, no por contacto
+  if (!props.conversation?.id) return
+  loadingNotes.value = true
+  try {
+    notes.value = await repo.listNotes(props.conversation.id)
+  } catch (e) {
+    console.error('[ContactPanel] Error cargando notas:', e)
+    notes.value = []
+  } finally {
+    loadingNotes.value = false
+  }
 }
 
 async function addNote() {
   const content = newNote.value.trim()
-  if (!content || !props.conversation.contactId || !auth.user?.id || !auth.organizationId) return
+  if (!content) return
+
+  // Validación defensiva de auth
+  if (!auth.user?.id || !auth.organizationId) {
+    alert('Sesión no válida. Por favor, recarga la página.')
+    return
+  }
+
   addingNote.value = true
+  saveFeedback.value = 'idle'
   try {
     const note = await repo.addNote(
-      props.conversation.contactId,
-      auth.organizationId,
-      content,
-      auth.user.id
+      props.conversation.id,        // conversationId (antes era contactId — BUG corregido)
+      auth.organizationId,          // organizationId (requerido por NOT NULL)
+      content,                      // content
+      auth.user.id                  // authorId (antes era createdBy)
     )
-    notes.value.unshift({
-      ...note,
-      createdByName: auth.user.fullName ?? auth.user.email
-    })
+    notes.value.unshift(note)
     newNote.value = ''
+    saveFeedback.value = 'saved'
+    setTimeout(() => (saveFeedback.value = 'idle'), 1500)
   } catch (e) {
-    alert('Error: ' + (e instanceof Error ? e.message : String(e)))
+    console.error('[ContactPanel] Error agregando nota:', e)
+    saveFeedback.value = 'error'
+    alert('Error al guardar la nota: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     addingNote.value = false
   }
 }
 
 async function deleteNote(id: string) {
-  if (!confirm('¿Eliminar nota?')) return
+  if (!confirm('¿Eliminar esta nota? No se puede deshacer.')) return
   try {
     await repo.deleteNote(id)
     notes.value = notes.value.filter((n) => n.id !== id)
   } catch (e) {
-    alert('Error: ' + (e instanceof Error ? e.message : String(e)))
+    console.error('[ContactPanel] Error eliminando nota:', e)
+    alert('Error al eliminar: ' + (e instanceof Error ? e.message : String(e)))
+  }
+}
+
+async function togglePin(note: ConversationNote) {
+  const newPinned = !note.pinned
+  // Optimistic update
+  const target = notes.value.find((n) => n.id === note.id)
+  if (target) target.pinned = newPinned
+
+  try {
+    await repo.togglePinNote(note.id, newPinned)
+  } catch (e) {
+    // Revert on error
+    if (target) target.pinned = !newPinned
+    console.error('[ContactPanel] Error cambiando pin:', e)
+    alert('No se pudo cambiar el pin: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -70,8 +115,14 @@ async function removeTag(tag: string) {
   emit('updated')
 }
 
+// Recargar notas cuando cambia la conversación activa
 watch(() => props.conversation.id, loadNotes)
 onMounted(loadNotes)
+
+// Helper: ¿la nota es del usuario actual?
+function isMyNote(note: ConversationNote): boolean {
+  return note.authorId === auth.user?.id
+}
 </script>
 
 <template>
@@ -147,40 +198,105 @@ onMounted(loadNotes)
       </div>
     </section>
 
-    <!-- Notas internas -->
+    <!-- Notas internas (por conversación) -->
     <section>
-      <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-        📝 Notas internas
-      </h4>
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          📝 Notas internas
+        </h4>
+        <span v-if="notes.length > 0" class="text-[10px] text-slate-400">
+          {{ notes.length }} {{ notes.length === 1 ? 'nota' : 'notas' }}
+        </span>
+      </div>
+
+      <!-- Form de nueva nota -->
       <div class="space-y-2 mb-3">
         <textarea
           v-model="newNote"
           rows="2"
-          class="w-full text-xs border border-surface-border rounded p-2 resize-none"
-          placeholder="Agregar nota (no visible al contacto)..."
+          class="w-full text-xs border border-surface-border rounded p-2 resize-none focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+          placeholder="Agregar nota interna (no visible al contacto)..."
+          :disabled="addingNote"
+          @keydown.ctrl.enter.prevent="addNote"
+          @keydown.meta.enter.prevent="addNote"
         />
         <button
           :disabled="!newNote.trim() || addingNote"
-          class="w-full text-xs bg-brand-600 text-white py-1.5 rounded disabled:opacity-50"
+          class="w-full text-xs py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :class="{
+            'bg-brand-600 text-white hover:bg-brand-700': saveFeedback === 'idle',
+            'bg-emerald-600 text-white': saveFeedback === 'saved',
+            'bg-red-600 text-white': saveFeedback === 'error'
+          }"
           @click="addNote"
         >
-          {{ addingNote ? 'Guardando...' : '+ Agregar nota' }}
+          <template v-if="addingNote">Guardando...</template>
+          <template v-else-if="saveFeedback === 'saved'">✓ Guardada</template>
+          <template v-else-if="saveFeedback === 'error'">✕ Error</template>
+          <template v-else>+ Agregar nota <span class="opacity-60">(Ctrl+Enter)</span></template>
         </button>
       </div>
 
-      <div class="space-y-2 max-h-64 overflow-auto">
-        <div v-if="notes.length === 0" class="text-xs text-slate-400 italic text-center">
-          Sin notas aún
+      <!-- Lista de notas -->
+      <div class="space-y-2 max-h-80 overflow-auto">
+        <div v-if="loadingNotes" class="text-xs text-slate-400 italic text-center py-4">
+          Cargando notas...
         </div>
+
+        <div v-else-if="notes.length === 0" class="text-xs text-slate-400 italic text-center py-4">
+          Sin notas aún. Agrega la primera ☝️
+        </div>
+
         <div
-          v-for="note in notes"
+          v-for="note in sortedNotes"
           :key="note.id"
-          class="bg-amber-50 border border-amber-200 rounded p-2 text-xs"
+          class="border rounded p-2 text-xs transition-colors"
+          :class="{
+            'bg-amber-50 border-amber-200': !note.pinned,
+            'bg-amber-100 border-amber-400 shadow-sm': note.pinned
+          }"
         >
-          <div class="text-slate-700 whitespace-pre-wrap">{{ note.content }}</div>
-          <div class="flex justify-between items-center mt-1 text-[10px] text-slate-500">
-            <span>{{ note.createdByName || 'Usuario' }} · {{ formatDateTime(note.createdAt) }}</span>
-            <button class="text-red-500 hover:underline" @click="deleteNote(note.id)">Borrar</button>
+          <!-- Contenido de la nota -->
+          <div class="text-slate-800 whitespace-pre-wrap leading-relaxed">{{ note.content }}</div>
+
+          <!-- Footer: autor + acciones -->
+          <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-amber-200/60">
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-600 min-w-0">
+              <!-- Avatar del autor -->
+              <div
+                v-if="note.authorAvatarUrl"
+                class="w-4 h-4 rounded-full bg-cover bg-center flex-shrink-0"
+                :style="{ backgroundImage: `url(${note.authorAvatarUrl})` }"
+              />
+              <div v-else class="w-4 h-4 rounded-full bg-slate-300 text-slate-700 grid place-items-center text-[8px] font-semibold flex-shrink-0">
+                {{ initials(note.authorName) }}
+              </div>
+              <span class="truncate">
+                <strong v-if="isMyNote(note)" class="text-brand-700">Tú</strong>
+                <template v-else>{{ note.authorName }}</template>
+                <span class="text-slate-400"> · {{ formatDateTime(note.createdAt) }}</span>
+              </span>
+            </div>
+
+            <!-- Acciones -->
+            <div class="flex items-center gap-2 flex-shrink-0 ml-2">
+              <button
+                class="hover:text-amber-700 transition-colors"
+                :class="note.pinned ? 'text-amber-600' : 'text-slate-400'"
+                :title="note.pinned ? 'Desfijar' : 'Fijar arriba'"
+                @click="togglePin(note)"
+              >
+                📌
+              </button>
+              <button
+                v-if="isMyNote(note)"
+                class="text-red-400 hover:text-red-600 transition-colors"
+                title="Eliminar"
+                @click="deleteNote(note.id)"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       </div>
