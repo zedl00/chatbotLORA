@@ -1,6 +1,6 @@
 // Ruta: /src/router/index.ts
 // ═══════════════════════════════════════════════════════════════
-// MODIFICADO en Sprint 9: ruta /admin/sla-config
+// MODIFICADO en Sprint 10: ruta /admin/analytics
 // ═══════════════════════════════════════════════════════════════
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import {
@@ -34,6 +34,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'dashboard',   name: 'admin.dashboard',   component: () => import('@/modules/reports/views/DashboardView.vue'),    meta: { permission: 'reports.view', title: 'Dashboard' } },
       { path: 'inbox',       name: 'admin.inbox',       component: () => import('@/modules/inbox/views/InboxView.vue'),          meta: { permission: 'conversations.read', title: 'Bandeja' } },
 
+      // 🆕 Sprint 10
+      { path: 'analytics',   name: 'admin.analytics',   component: () => import('@/modules/analytics/views/AnalyticsView.vue'),  meta: { permission: 'analytics.read', title: 'Analytics' } },
+
       { path: 'contacts',          name: 'admin.contacts',         component: () => import('@/modules/contacts/views/ContactsView.vue'),       meta: { permission: 'contacts.read', title: 'Contactos' } },
       { path: 'contacts/:id',      name: 'admin.contact-detail',   component: () => import('@/modules/contacts/views/ContactDetailView.vue'),  meta: { permission: 'contacts.read', title: 'Detalle del contacto' } },
 
@@ -41,12 +44,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'knowledge',   name: 'admin.knowledge',   component: () => import('@/modules/knowledge/views/KnowledgeView.vue'),  meta: { permission: 'knowledge.read', title: 'Conocimiento' } },
       { path: 'channels',    name: 'admin.channels',    component: () => import('@/modules/channels/views/ChannelsView.vue'),    meta: { permission: 'channels.read', title: 'Canales' } },
       { path: 'agents',      name: 'admin.agents',      component: () => import('@/modules/agents/views/AgentsView.vue'),        meta: { permission: 'agents.read', title: 'Equipo' } },
-
       { path: 'quick-replies', name: 'admin.quick-replies', component: () => import('@/modules/agents/views/QuickRepliesView.vue'), meta: { permission: 'quick_replies.read', title: 'Respuestas rápidas' } },
-
-      // 🆕 Sprint 9
       { path: 'sla-config',  name: 'admin.sla-config',  component: () => import('@/modules/settings/views/SlaConfigView.vue'),   meta: { permission: 'sla_config.read', title: 'Configuración de SLA' } },
-
       { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view', title: 'Reportes' } },
       { path: 'branding',    name: 'admin.branding',    component: () => import('@/modules/settings/views/BrandingView.vue'),    meta: { permission: 'settings.update', title: 'Branding' } },
 

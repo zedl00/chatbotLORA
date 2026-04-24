@@ -1,345 +1,293 @@
-# 🦸 Sprint 9 — Supervisor Tools
+# 📊 Sprint 10 — Agent Analytics
 
-El cuadrante **C** del Agent Workspace: herramientas para que supervisores y admins tomen control, guíen agentes en vivo, y respondan ante breaches de SLA.
+El cuadrante **D** del Agent Workspace: dashboard completo de métricas con 7 gráficos, 6 filtros enterprise, y export CSV.
 
 ---
 
-## 📦 Archivos incluidos (13)
+## 📦 Archivos incluidos (16)
 
 | Ruta | Tipo | Descripción |
 |---|---|---|
-| `supabase/migrations/2026_sprint_9.sql` | 🆕 Migración | Tablas + RPCs + permisos + cron |
-| `src/types/supervisor.types.ts` | 🆕 Tipos | Escalation, SlaConfig, ESCALATION_TYPE_LABELS |
-| `src/repository/supabase/supervisor.repo.ts` | 🆕 Repo | takeover, whisper, reassign, escalations |
-| `src/repository/supabase/sla-config.repo.ts` | 🆕 Repo | CRUD de config SLA |
-| `src/stores/escalations.store.ts` | 🆕 Store | Lista reactiva + realtime |
-| `src/components/SupervisorAlerts.vue` | 🆕 Componente | Badge 🚨 en header |
-| `src/modules/inbox/components/TakeoverButton.vue` | 🆕 Componente | 🦸 Tomar control |
-| `src/modules/inbox/components/ReassignDropdown.vue` | 🆕 Componente | 🔄 Reasignar |
-| `src/modules/inbox/components/EscalationBanner.vue` | 🆕 Componente | Banner en conv escalada |
-| `src/modules/inbox/components/ConversationThread.vue` | 🔧 Reemplazar | + whisper mode + system messages |
-| `src/modules/settings/views/SlaConfigView.vue` | 🆕 Vista | Config SLA por tenant |
-| `src/layouts/AdminLayout.vue` | 🔧 Reemplazar | + SupervisorAlerts + menú SLA |
-| `src/router/index.ts` | 🔧 Reemplazar | + ruta sla-config |
+| `supabase/migrations/2026_sprint_10.sql` | 🆕 SQL | Permisos + 2 vistas + RPC heatmap + seed 50 convs |
+| `src/types/analytics.types.ts` | 🆕 Tipos | Filtros, summary, charts, helpers de fechas |
+| `src/repository/supabase/analytics.repo.ts` | 🆕 Repo | Queries y cálculos de métricas |
+| `src/modules/analytics/views/AnalyticsView.vue` | 🆕 Vista | Página principal con 4 tabs |
+| `src/modules/analytics/components/DateRangePicker.vue` | 🆕 | Selector con 10 presets + custom |
+| `src/modules/analytics/components/MetricCard.vue` | 🆕 | Card reutilizable con deltas |
+| `src/modules/analytics/components/VolumeLineChart.vue` | 🆕 | Gráfico línea con comparativo |
+| `src/modules/analytics/components/StatusDonutChart.vue` | 🆕 | Dona de estados (4 segmentos) |
+| `src/modules/analytics/components/TopAgentsBarChart.vue` | 🆕 | Barras horizontales top 5 |
+| `src/modules/analytics/components/HourlyHeatmap.vue` | 🆕 | Heatmap 7 × 24 horas |
+| `src/modules/analytics/components/AgentRadarChart.vue` | 🆕 | Radar 5 ejes por agente |
+| `src/modules/analytics/components/FrtVolumeBubbleChart.vue` | 🆕 | Bubble FRT vs volumen |
+| `src/modules/analytics/components/ExportCsvButton.vue` | 🆕 | Export conversaciones/agentes |
+| `src/modules/analytics/tabs/LeaderboardTab.vue` | 🆕 | Ranking con 🥇🥈🥉 |
+| `src/modules/analytics/tabs/ComparativoTab.vue` | 🆕 | Tabla vs período anterior |
+| `src/layouts/AdminLayout.vue` | 🔧 | + menú "📈 Analytics" |
+| `src/router/index.ts` | 🔧 | + ruta /admin/analytics |
 
 ---
 
 ## 🚀 Aplicación
 
-### Paso 1: SQL (crítico, orden importante)
+### Paso 1: SQL (crítico)
 
-Supabase → SQL Editor → pega `supabase/migrations/2026_sprint_9.sql` → Run.
+Supabase → SQL Editor → pega el contenido completo de `2026_sprint_10.sql` → Run.
 
-**Verifica al final** que veas:
-
+**Verifica que al final veas:**
 ```
-sla_configs_created  : 3 (una por cada org que tengas)
-escalations_table    : true
-rpcs                 : 4 (detect_sla_breaches, supervisor_takeover, send_whisper, reassign_conversation)
-permissions          : 6
+permisos:            2
+vista_analytics:     true
+vista_agent_metrics: true
+rpc_heatmap:         true
+seed_conversations:  50
+seed_por_estado:
+  abandoned: 5
+  open:      7
+  pending:   8
+  resolved:  30
 ```
 
-#### ⚠️ Sobre pg_cron
+✅ Si los 5 checks pasan, continúa.
 
-Al final del SQL verás un mensaje: `lora_detect_sla_breaches programado` o `pg_cron NO disponible`.
+### Paso 2: Copiar archivos
 
-- Si está disponible: ya corre cada 1 min server-side ✅
-- Si no: puedes correr manualmente `SELECT detect_sla_breaches();` cuando quieras probar
-
----
-
-### Paso 2: Copiar los 12 archivos de frontend
-
-Respeta estructura completa `/src/...`
+Copia las **16 rutas** respetando estructura desde `/src/`.
 
 ### Paso 3: Build
 
 ```powershell
+cd C:\xampp\htdocs\proyectos\chatbot
 npm run build
 ```
 
-**Si hay error**, pégamelo. El punto más probable de fallo: imports de tipos (`AgentLive`, `AgentStatus`).
+Si pasa sin errores TS → Paso 4. Si falla → pégame el error.
 
-### Paso 4: Dev
+### Paso 4: Deploy FTP
 
-```powershell
-npm run dev
 ```
+CoreFTP → ftp.jabenter.com → usuario lora@jabenter.com
+→ /public_html/lora/
+→ Borrar contenido
+→ Subir todo el contenido de dist/
+```
+
+### Paso 5: Verificar en lora.jabenter.com
+
+1. Login
+2. Click en el nuevo menú **"📈 Analytics"** arriba del sidebar
+3. URL: `/admin/analytics`
+
+**✅ Esperado:** dashboard carga con datos seed.
 
 ---
 
-## 🧪 Testing completo (10 tests)
+## 🧪 Tests de verificación
 
-### Test 1 — Badge SupervisorAlerts visible en header
+### Test 1 — Dashboard carga con datos
 
-1. Login como super_admin o admin
-2. Mira arriba a la derecha
+Debes ver:
+- **Banner azul/verde** "Este período vs anterior..."
+- **5 metric cards** con números reales
+- **Tab "Dashboard" activo** con 6 gráficos + preview leaderboard
 
-**✅ Esperado:** ves el badge 🚨 con "0" (no hay alertas aún)
+### Test 2 — Selector de fechas
 
-**❌ Si no aparece:** verifica permiso `escalations.read`. Corre:
+1. Click en el botón `📅 Últimos 7 días`
+2. Dropdown con grupos: Rápidos / Por mes / Últimos N días / Año / Personalizado
+
+**Prueba:**
+- Click "Hoy" → dashboard se actualiza (probablemente vacío si no hay convs de hoy)
+- Click "Últimos 30 días" → deberías ver los 50 seed
+- Click "Personalizado" → date inputs + botón Aplicar
+
+### Test 3 — Filtros enterprise
+
+Prueba cada uno:
+- **Agente:** dropdown con nombres (filtra el dashboard)
+- **Canal:** web_widget / WhatsApp / etc.
+- **Estado:** Abiertas / Pendientes / Resueltas / Abandonadas
+- **Prioridad:** Sin / Baja / Media / Alta
+- **Equipo:** si existe tabla teams (si no, el selector no aparece)
+
+### Test 4 — Los 7 gráficos
+
+Scroll en tab Dashboard:
+
+1. **📈 Línea volumen diario** — línea azul sólida (actual) + punteada (anterior)
+2. **🍩 Dona estados** — 4 colores con leyenda
+3. **📊 Top agentes** — barras horizontales con initiales
+4. **🎯 Radar agente** — pentágono con dropdown para elegir agente
+5. **🔥 Heatmap** — grid 7×24 con colores purple
+6. **🫧 Bubble** — burbujas coloreadas por CSAT
+7. **🏆 Leaderboard preview** — top 3 abajo
+
+### Test 5 — Tab Leaderboard
+
+Click tab **🏆 Leaderboard**:
+- Lista completa con medallas 🥇🥈🥉
+- Info: resueltas, FRT, CSAT, % resolución, volumen
+
+### Test 6 — Tab Horarios
+
+Click tab **🔥 Horarios**:
+- Heatmap grande con leyenda de intensidad
+- Hover en cada celda muestra: "Lun 14:00 — X conversaciones"
+
+### Test 7 — Tab Comparativo
+
+Click tab **🎯 Comparativo**:
+- 4 cards comparando período actual vs anterior:
+  - Volumen, Resueltas, FRT, CSAT
+- Deltas en verde (mejor) o rojo (peor)
+
+### Test 8 — Export CSV
+
+Hover sobre botón **📥 Exportar CSV**:
+- 2 opciones: Conversaciones (50 filas) / Agentes
+- Click → descarga archivo .csv con datos filtrados
+- Abre en Excel → verifica encabezados y valores
+
+---
+
+## 🧹 Limpiar seed después
+
+Cuando ya no necesites los datos de demo:
+
 ```sql
-SELECT * FROM role_permissions rp 
-JOIN permissions p ON p.id = rp.permission_id 
-WHERE p.key = 'escalations.read';
+-- Borrar los 50 conversations + sus mensajes
+DELETE FROM conversations WHERE metadata->>'seed' = 'true';
+-- Los mensajes se borran en cascada (ON DELETE CASCADE en conversation_id)
 ```
-Debería devolver filas.
+
+Si el contacto demo también:
+```sql
+DELETE FROM contacts WHERE metadata->>'seed' = 'true';
+```
 
 ---
 
-### Test 2 — Config SLA funciona
+## 📊 Fórmulas de métricas
 
-1. Sidebar → **Configuración → ⏰ Config SLA**
-2. URL: `/admin/sla-config`
-
-**✅ Esperado:**
-- Carga con valores: `5 minutos`, `Notificar supervisores: ON`, `SLA activo: ON`
-- Si cambias a 10 y guardas → toast verde
-
----
-
-### Test 3 — Whisper mode (la feature más cool 🤫)
-
-1. Inbox → abre una conversación **que estés atendiendo tú**
-2. En el editor, abajo a la izquierda ves un toggle:
-   `🤫 Whisper`
-3. Click → el toggle se pone ámbar, textarea cambia a fondo amarillo, placeholder dice "Mensaje privado al equipo"
-4. Escribe: `Dale 20% de descuento pero no ofrezcas más`
-5. Click en el botón ámbar `🤫`
-
-**✅ Esperado:**
-- Toast "Whisper enviado al equipo"
-- Aparece un bubble amarillo con borde punteado arriba, tipo:
-  ```
-  🤫 WHISPER · VISIBLE SOLO AL EQUIPO
-  Dale 20% de descuento pero no ofrezcas más
-  ```
-- El cliente (en el widget) NO ve este mensaje
-
-**⚠️ Para verificar que el cliente no lo ve:**
-- Abre el widget de tu sitio de prueba con esa misma conversación (el contacto)
-- Los mensajes whisper NO deberían mostrarse ahí
+| Métrica | Fórmula |
+|---|---|
+| **FRT** | `first_response_at - handoff_at` |
+| **Resolution time** | `resolved_at - created_at` |
+| **Handoff rate** | `conversaciones con agent_id / total × 100` |
+| **Resolution rate** | `resolved / total × 100` |
+| **CSAT promedio** | `AVG(csat_score) WHERE NOT NULL` |
+| **Radar score compuesto** | `resolved + csat × 5 - frt_min` |
 
 ---
 
-### Test 4 — Takeover funciona
+## 🎨 Diseño visual
 
-Necesitas 2 usuarios diferentes para este test.
-
-1. **Usuario A** (admin o supervisor): toma una conversación ("🙋 Tomar")
-2. **Usuario B** (otro admin/supervisor): entra al mismo Inbox, abre esa conversación
-3. Usuario B ve en el header el botón: **🦸 Tomar control** (ámbar)
-4. Click en "Tomar control" → confirma
-
-**✅ Esperado:**
-- Usuario B: toast "Has tomado el control"
-- Aparece mensaje de sistema (pill gris centrado): "Un supervisor tomó el control de esta conversación."
-- Usuario A: si tiene la conv abierta, verá que ya no puede enviar mensajes
-- Se registra un evento `takeover` en tabla `escalations`
+- **Colores:** paleta consistente (brand-blue, emerald, amber, red)
+- **Layout:** grid responsive (desktop 3-col, mobile stacked)
+- **Charts:** SVG puro, cero librerías externas (todo custom)
+- **Estados vacíos:** mensajes amigables cuando no hay data
 
 ---
 
-### Test 5 — Reasignación manual
+## 🐛 Troubleshooting
 
-1. En una conversación que estés atendiendo tú
-2. Click en botón **🔄 Reasignar ▾**
+### "relation v_conversations_analytics does not exist"
+El SQL no se aplicó. Re-corre `2026_sprint_10.sql`.
 
-**✅ Esperado:**
-- Dropdown con lista de agentes disponibles
-- Cada uno con dot de color (online/busy/away/offline)
-- Agentes que no eres tú
+### Dashboard vacío aunque corriste el seed
+Verifica:
+```sql
+SELECT COUNT(*), status FROM conversations 
+WHERE metadata->>'seed' = 'true' 
+GROUP BY status;
+```
+Debe devolver 4 filas (open/pending/resolved/abandoned).
 
-3. Click en otro agente → confirma
+### "Sin actividad de agentes en este período"
+Los seed usan agentes existentes. Si solo tienes 1 agente, aparecerá solo ese.
 
-**✅ Esperado:**
-- Toast: "Conversación reasignada a X"
-- Mensaje sistema: "Conversación reasignada a X"
-- La conv ya no aparece como tuya
+### Build falla con TS errors
+Lo más probable: falta importar `SupervisorAlerts` o tipos viejos. Pégame el error.
 
----
+### El selector de Equipo no aparece
+Es esperado si no tienes tabla `teams` en la DB. El repo maneja ese caso con warning silencioso.
 
-### Test 6 — SLA breach detectado (toma 5+ min)
-
-1. Config SLA = 2 minutos (cambia temporalmente para probar rápido)
-2. Deja que un contacto escriba por el widget
-3. Toma la conversación como agente A
-4. **NO respondas durante 2+ minutos**
-5. Corre manualmente: `SELECT detect_sla_breaches();` en SQL Editor  
-   *(o espera al cron si pg_cron está activo)*
-
-**✅ Esperado:**
-- El badge del header cambia a 🚨 con "1"
-- Si entras a la conversación, aparece banner rojo arriba: **"SLA vencido - El agente no respondió..."**
-- Se crea fila en tabla `escalations` con `type = 'sla_breach'`
+### CSV no descarga en Safari
+Tiene un bug conocido. Funciona en Chrome/Firefox/Edge sin problema.
 
 ---
 
-### Test 7 — Resolver breach automáticamente
+## 🔐 Permisos RBAC
 
-Continuando del Test 6:
+| Rol | analytics.read | analytics.export |
+|---|---|---|
+| agent | ❌ | ❌ |
+| supervisor | ✅ team | ✅ team |
+| admin | ✅ all | ✅ all |
+| super_admin | ✅ all | ✅ all |
 
-1. Respóndele al cliente algo cualquiera
-2. Refresca (o espera)
-
-**✅ Esperado:**
-- El banner desaparece
-- Badge vuelve a 0
-- Tabla `escalations`: ese breach tiene `resolved = true`
-
----
-
-### Test 8 — Dropdown de alertas del header
-
-1. Con al menos 1 escalation activa
-2. Click en el badge 🚨
-
-**✅ Esperado:**
-- Dropdown con lista
-- Cada item: emoji (🚨/🦸/🔄), nombre del contacto, info del evento, tiempo relativo
-- Click en un item → lleva al Inbox con esa conv seleccionada
-
----
-
-### Test 9 — Resolver manualmente desde banner
-
-1. Entra a conversación con banner rojo
-2. Click en **"✓ Marcar como visto"** (derecha del banner)
-
-**✅ Esperado:**
-- Banner desaparece
-- Toast: "Alerta resuelta"
-
----
-
-### Test 10 — Permisos funcionan
-
-1. Crea un usuario con role `agent` (sin escalations.read)
-2. Login como ese agent
-3. Verifica:
-
-**✅ Esperado:**
-- NO ve el badge 🚨 en header
-- NO ve el botón 🦸 Tomar control en conversaciones de otros
-- NO ve el botón 🔄 Reasignar
-- NO ve el toggle 🤫 Whisper
-- NO ve "Config SLA" en el sidebar
-
----
-
-## 🔐 Matriz de permisos
-
-| Permiso | agent | supervisor | admin | super_admin |
-|---|---|---|---|---|
-| conversations.takeover | ❌ | ✅ | ✅ | ✅ |
-| conversations.whisper  | ❌ | ✅ | ✅ | ✅ |
-| conversations.reassign | ❌ | ✅ | ✅ | ✅ |
-| sla_config.read        | ❌ | ✅ | ✅ | ✅ |
-| sla_config.update      | ❌ | ❌ | ✅ | ✅ |
-| escalations.read       | ❌ | ✅ | ✅ | ✅ |
-
----
-
-## 🎨 UX detalles implementados
-
-- **Badge en header rojo** solo si hay alertas; gris sin ellas
-- **Banner de escalation** color-coded por tipo (rojo=sla, ámbar=takeover, azul=reassign)
-- **Whisper bubbles** con fondo amarillo + borde punteado para que sean inconfundibles
-- **Messages system** como pills centradas en gris (no interrumpen el flujo del chat)
-- **Dropdown de reasignación** muestra estado live de cada agente (online primero)
-- **Confirmaciones** en acciones irreversibles (takeover, reassign)
-- **Realtime automático** en el badge y los banners (no requiere recargar)
+Si un agent común intenta ir a `/admin/analytics`, lo redirige a dashboard.
 
 ---
 
 ## 💾 Commit sugerido
 
 ```bash
+cd C:\xampp\htdocs\proyectos\chatbot
 git add -A
-git commit -m "feat(sprint-9): Supervisor Tools completo
+git commit -m "feat(sprint-10): Agent Analytics dashboard completo
 
-- SQL: tabla sla_configs, escalations; RPCs takeover/whisper/
-  reassign/detect_sla_breaches; triggers de first_response_at y
-  sla_due_at; 6 permisos nuevos; cron pg_cron cada 1 min.
-- Supervisor tools: takeover de conversaciones, whisper privado
-  al equipo, reasignación entre agentes.
-- Banner de escalation en conversaciones con SLA breach, takeover
-  o reassign.
-- Badge de alertas en header con dropdown de escalamientos activos
-  (realtime).
-- Vista /admin/sla-config con toggle enable, minutos, notif.
-- ConversationThread: toggle whisper mode con UI ámbar distintiva,
-  bubbles diferenciados para whisper y system messages.
-- RBAC: solo supervisor y admin acceden a supervisor tools."
+SQL:
+- Vista v_conversations_analytics (base para queries)
+- Vista v_agent_metrics (agregados por agente)
+- RPC get_heatmap_data (día × hora)
+- 2 permisos: analytics.read / analytics.export
+- Seed de 50 conversaciones fake para demo
+
+Frontend:
+- Vista /admin/analytics con 4 tabs
+- DateRangePicker con 10 presets + custom
+- 6 filtros: fecha, agente, canal, estado, prioridad, equipo
+- 7 gráficos SVG puros (sin libs):
+  * Línea volumen con comparativo período anterior
+  * Dona 4 estados
+  * Barras horizontales top 5 agentes
+  * Radar pentágono por agente
+  * Heatmap 7×24 horas
+  * Bubble FRT vs volumen
+  * Leaderboard preview
+- Tab Leaderboard con 🥇🥈🥉
+- Tab Horarios fullsize
+- Tab Comparativo período vs anterior
+- Export CSV (conversaciones + agentes)
+
+Agent Workspace completo: cuadrantes A, B, C y D implementados."
+
+git push
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## ✅ Agent Workspace COMPLETO
 
-### "ambiguous relationship" en queries de escalations
-Es el mismo patrón de PGRST201 que vimos en Sprint 6.8. Si aparece, corre:
-```sql
--- Verificar constraints colisionantes
-SELECT constraint_name, pg_get_constraintdef(oid)
-FROM pg_constraint
-WHERE conrelid = 'escalations'::regclass;
 ```
-
-**Si ves múltiples constraints hacia users** (esperado: 4 — `actor_id`, `from_user_id`, `to_user_id`, `resolved_by`), todos deben tener nombres únicos. PostgREST usa esos nombres para el embed explícito.
-
-**Fix si hay conflicto**:
-```sql
--- Ejemplo: si el constraint tiene un nombre duplicado
-ALTER TABLE escalations 
-  DROP CONSTRAINT escalations_actor_id_fkey,
-  ADD CONSTRAINT escalations_actor_user_fkey
-    FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL;
+[✅] Cuadrante A (Gestión)       · Sprint 7.5 + 8
+[✅] Cuadrante B (Mi workspace)  · Sprint 8
+[✅] Cuadrante C (Supervisor)    · Sprint 9
+[✅] Cuadrante D (Analytics)     · Sprint 10 ← ESTE
 ```
-Luego ajusta `supervisor.repo.ts` para usar el nuevo nombre en el embed.
-
-### "check constraint violation" al insertar mensaje
-El `CHECK constraint` nuevo rechazó un sender_type inválido. Verifica:
-```sql
-SELECT DISTINCT sender_type FROM messages;
-```
-Si hay algo que no sea contact/agent/bot/whisper/system, ajustamos el constraint.
-
-### El badge no se actualiza en tiempo real
-Verifica que Realtime está habilitado para tabla `escalations`:
-Dashboard → Database → Replication → marca `escalations` como enabled.
-
-### "No tengo permiso para whisper/takeover/reassign"
-Tu rol no tiene el permiso asignado. Verifica:
-```sql
-SELECT u.email, r.key AS role, p.key AS permission
-FROM users u
-JOIN user_roles ur ON ur.user_id = u.id
-JOIN roles r ON r.id = ur.role_id
-JOIN role_permissions rp ON rp.role_id = r.id
-JOIN permissions p ON p.id = rp.permission_id
-WHERE u.id = 'tu-user-id' AND p.key LIKE 'conversations.%';
-```
-
-### No se detectan breaches automáticamente
-1. Verifica que `sla_configs.enabled = true` para tu org
-2. Verifica `sla_due_at` en conversations: debe estar lleno
-3. Corre manualmente: `SELECT detect_sla_breaches();`
-4. Si pg_cron no está disponible, puedes programar cron alternativo (Edge Function con Supabase Scheduler)
 
 ---
 
-## 🎯 Sprint 9 COMPLETO ✅
+## 🚀 ¿Qué sigue?
 
-Cuadrante C del Agent Workspace terminado. Ahora:
+Con el Agent Workspace terminado, las opciones son:
 
-**Sprint 10 — Agent Analytics** (cuadrante D):
-- Métricas por agente (FRT, CSAT, resueltas)
-- Leaderboard semanal
-- Horarios de mayor carga
-- Exportar CSV
-
-**O puedes enfocar primero en:**
-- Pre-chat widget (Entrega 2.5 pendiente)
-- Deploy producción
-- Telegram
-- Landing page
+1. **Pre-chat widget** (Entrega 2.5 pendiente de Sprint 7.5)
+2. **Sprint 11: Settings avanzado** (branding, notificaciones, integraciones)
+3. **Sprint 12: Email invitaciones** (flujo completo con templates)
+4. **Sprint 13: Telegram** (2do canal)
+5. **Sprint 14: Landing comercial** (lorachat.net)
+6. **Sprint 15: Stripe billing** (monetización)
+7. **Sprint 16: Constructor visual de flujos**
+8. **Sprint 17: WhatsApp Business API**

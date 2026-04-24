@@ -1,9 +1,5 @@
 <!-- Ruta: /src/layouts/AdminLayout.vue -->
-<!-- ═══════════════════════════════════════════════════════════════
-     MODIFICADO en Sprint 9:
-       - SupervisorAlerts badge en el header (alertas escalamientos)
-       - Menú "Config SLA" en sección Configuración
-     ═══════════════════════════════════════════════════════════════ -->
+<!-- MODIFICADO en Sprint 10: menú "📊 Analytics" visible arriba -->
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
@@ -48,6 +44,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/admin/dashboard',    label: 'Dashboard',    icon: '📊', permission: 'reports.view' },
   { to: '/admin/inbox',        label: 'Bandeja',      icon: '💬', permission: 'conversations.read' },
+  // 🆕 Sprint 10
+  { to: '/admin/analytics',    label: 'Analytics',    icon: '📈', permission: 'analytics.read' },
   { to: '/admin/contacts',     label: 'Contactos',    icon: '👥', permission: 'contacts.read' },
 
   { to: '/admin/ai-personas',  label: 'Personalidades IA', icon: '🤖', permission: 'ai.configure', section: 'IA' },
@@ -58,7 +56,6 @@ const navItems: NavItem[] = [
   { to: '/admin/channels',     label: 'Canales',      icon: '🔌', permission: 'channels.read',  section: 'Configuración' },
   { to: '/admin/agents',       label: 'Equipo',       icon: '🧑‍💼', permission: 'agents.read',  section: 'Configuración' },
   { to: '/admin/quick-replies', label: 'Respuestas rápidas', icon: '💬', permission: 'quick_replies.read', section: 'Configuración' },
-  // 🆕 Sprint 9
   { to: '/admin/sla-config',   label: 'Config SLA',   icon: '⏰', permission: 'sla_config.read', section: 'Configuración' },
   { to: '/admin/reports',      label: 'Reportes',     icon: '📈', permission: 'reports.view',   section: 'Configuración' },
   { to: '/admin/branding',     label: 'Branding',     icon: '🎨', permission: 'settings.update', section: 'Configuración' },
@@ -141,12 +138,8 @@ async function handleSignOut() {
                 {{ orgStore.displayName.charAt(0).toUpperCase() }}
               </div>
               <div class="min-w-0">
-                <div class="font-semibold text-slate-900 text-sm truncate">
-                  {{ orgStore.displayName }}
-                </div>
-                <div class="text-[10px] text-slate-400 truncate">
-                  en LORA
-                </div>
+                <div class="font-semibold text-slate-900 text-sm truncate">{{ orgStore.displayName }}</div>
+                <div class="text-[10px] text-slate-400 truncate">en LORA</div>
               </div>
             </div>
 
@@ -192,7 +185,6 @@ async function handleSignOut() {
           <h1 class="text-lg font-semibold text-slate-800">{{ $route.meta.title ?? '' }}</h1>
 
           <div class="flex items-center gap-3">
-            <!-- 🆕 Sprint 9: Supervisor Alerts -->
             <SupervisorAlerts v-if="authStore.user" />
             <AgentStatusBadge v-if="authStore.user" />
 
