@@ -4,7 +4,8 @@ import type { Sentiment, UrgencyLevel } from './ai.types'
 
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed'
 export type ChannelType = 'web_widget' | 'whatsapp' | 'telegram' | 'instagram' | 'messenger' | 'email'
-export type MessageSenderType = 'contact' | 'bot' | 'agent' | 'system'
+// 🆕 Sprint 9: añadidos 'whisper' (mensaje privado al equipo) y 'system' (eventos automáticos)
+export type MessageSenderType = 'contact' | 'bot' | 'agent' | 'system' | 'whisper'
 
 export interface InboxConversation {
   id: string

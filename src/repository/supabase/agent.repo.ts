@@ -1,53 +1,79 @@
 // Ruta: /src/repository/supabase/agent.repo.ts
+// ═══════════════════════════════════════════════════════════════
+// Sprint 7.5 + 8 · Repository para agentes
+//
+// Incluye:
+//   - Listar agentes live (desde v_agents_live)
+//   - Cambiar estado manualmente (online/busy/away/offline)
+//   - Heartbeat para mantener "online"
+//   - Update de config (maxChats, skills, autoAssign)
+// ═══════════════════════════════════════════════════════════════
 import { supabase } from '@/services/supabase.client'
-import type { IRepository } from '../base.repository'
-import type { Agent, AgentWithUser, AgentStatus } from '@/types/agent.types'
-import type { PaginatedResult } from '@/types/api.types'
+import type {
+  Agent,
+  AgentLive,
+  AgentStatus
+} from '@/types/agent.types'
 
-function toAgent(row: Record<string, any>): Agent {
+function toAgent(r: any): Agent {
   return {
-    id: row.id,
-    userId: row.user_id,
-    organizationId: row.organization_id,
-    teamId: row.team_id,
-    status: row.status,
-    statusMessage: row.status_message,
-    maxConcurrentChats: row.max_concurrent_chats,
-    autoAssign: row.auto_assign,
-    skills: row.skills ?? [],
-    workingHours: row.working_hours ?? {},
-    slaTier: row.sla_tier,
-    statusChangedAt: row.status_changed_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    id: r.id,
+    userId: r.user_id,
+    organizationId: r.organization_id,
+    teamId: r.team_id,
+    status: r.status,
+    statusMessage: r.status_message,
+    maxConcurrentChats: r.max_concurrent_chats ?? 5,
+    autoAssign: r.auto_assign ?? true,
+    skills: r.skills ?? [],
+    workingHours: r.working_hours ?? {},
+    slaTier: r.sla_tier ?? 'standard',
+    statusChangedAt: r.status_changed_at,
+    lastActivityAt: r.last_activity_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
   }
 }
 
-function toAgentWithUser(row: Record<string, any>): AgentWithUser {
+function toAgentLive(r: any): AgentLive {
   return {
-    ...toAgent(row),
-    user: {
-      id: row.users.id,
-      fullName: row.users.full_name,
-      email: row.users.email,
-      avatarUrl: row.users.avatar_url,
-      role: row.users.role
-    }
+    agentId: r.agent_id,
+    userId: r.user_id,
+    organizationId: r.organization_id,
+    teamId: r.team_id,
+    status: r.status,
+    statusMessage: r.status_message,
+    statusChangedAt: r.status_changed_at,
+    lastActivityAt: r.last_activity_at,
+    maxConcurrentChats: r.max_concurrent_chats ?? 5,
+    autoAssign: r.auto_assign ?? true,
+    skills: r.skills ?? [],
+    email: r.email,
+    fullName: r.full_name,
+    avatarUrl: r.avatar_url,
+    userActive: r.user_active,
+    teamName: r.team_name,
+    teamColor: r.team_color,
+    activeConversations: r.active_conversations ?? 0,
+    atCapacity: r.at_capacity ?? false
   }
 }
 
-export class SupabaseAgentRepo implements IRepository<Agent> {
-  async findById(id: string): Promise<Agent | null> {
+export class SupabaseAgentRepo {
+  // ───── Listar agentes live ─────
+  async listAgentsLive(organizationId: string): Promise<AgentLive[]> {
     const { data, error } = await supabase
-      .from('agents')
+      .from('v_agents_live')
       .select('*')
-      .eq('id', id)
-      .maybeSingle()
+      .eq('organization_id', organizationId)
+      .order('status', { ascending: true })  // online primero alfabéticamente
+      .order('full_name', { ascending: true })
     if (error) throw error
-    return data ? toAgent(data) : null
+    return (data ?? []).map(toAgentLive)
   }
 
-  async findByUserId(userId: string): Promise<Agent | null> {
+  // ───── Obtener mi propio agent record ─────
+  async getMyAgent(userId: string): Promise<Agent | null> {
     const { data, error } = await supabase
       .from('agents')
       .select('*')
@@ -57,99 +83,67 @@ export class SupabaseAgentRepo implements IRepository<Agent> {
     return data ? toAgent(data) : null
   }
 
-  async findMany(params: {
-    filters?: Record<string, unknown>
-    limit?: number
-    offset?: number
-  } = {}): Promise<PaginatedResult<Agent>> {
-    const { limit = 50, offset = 0 } = params
-    let q = supabase.from('agents').select('*', { count: 'exact' })
-
-    if (params.filters) {
-      for (const [k, v] of Object.entries(params.filters)) {
-        if (v !== undefined && v !== null) q = q.eq(k, v as any)
-      }
-    }
-
-    q = q.range(offset, offset + limit - 1)
-    const { data, error, count } = await q
+  // ───── Heartbeat: mantener "online" ─────
+  async heartbeat(userId: string): Promise<void> {
+    const { error } = await supabase.rpc('agent_heartbeat', { p_user_id: userId })
     if (error) throw error
-
-    return {
-      data: (data ?? []).map(toAgent),
-      count: count ?? 0,
-      hasMore: (count ?? 0) > offset + limit
-    }
   }
 
-  /**
-   * Lista agentes con datos del user join. Útil para vista de equipo.
-   */
-  async findManyWithUser(organizationId: string): Promise<AgentWithUser[]> {
-    const { data, error } = await supabase
-      .from('agents')
-      .select('*, users!inner(id, full_name, email, avatar_url, role)')
-      .eq('organization_id', organizationId)
-      .order('status', { ascending: true })
-
+  // ───── Cambiar estado manualmente ─────
+  async setStatus(
+    userId: string,
+    status: AgentStatus,
+    message: string | null = null
+  ): Promise<void> {
+    const { error } = await supabase.rpc('agent_set_status', {
+      p_user_id: userId,
+      p_status: status,
+      p_status_message: message
+    })
     if (error) throw error
-    return (data ?? []).map(toAgentWithUser)
   }
 
-  async create(input: Partial<Agent>): Promise<Agent> {
-    const { data, error } = await supabase
-      .from('agents')
-      .insert({
-        user_id: input.userId,
-        organization_id: input.organizationId,
-        team_id: input.teamId,
-        max_concurrent_chats: input.maxConcurrentChats ?? 5,
-        auto_assign: input.autoAssign ?? true,
-        skills: input.skills ?? [],
-        working_hours: input.workingHours ?? {},
-        sla_tier: input.slaTier ?? 'standard'
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-    return toAgent(data)
-  }
-
-  async update(id: string, input: Partial<Agent>): Promise<Agent> {
+  // ───── Update configuración del agente ─────
+  async updateAgent(
+    agentId: string,
+    input: Partial<Pick<Agent, 'maxConcurrentChats' | 'autoAssign' | 'skills' | 'teamId' | 'slaTier'>>
+  ): Promise<Agent> {
     const patch: Record<string, any> = {}
-    if (input.teamId !== undefined)              patch.team_id = input.teamId
-    if (input.status !== undefined)              patch.status = input.status
-    if (input.statusMessage !== undefined)       patch.status_message = input.statusMessage
-    if (input.maxConcurrentChats !== undefined)  patch.max_concurrent_chats = input.maxConcurrentChats
-    if (input.autoAssign !== undefined)          patch.auto_assign = input.autoAssign
-    if (input.skills !== undefined)              patch.skills = input.skills
-    if (input.workingHours !== undefined)        patch.working_hours = input.workingHours
-    if (input.slaTier !== undefined)             patch.sla_tier = input.slaTier
-
-    if (input.status !== undefined) patch.status_changed_at = new Date().toISOString()
+    if (input.maxConcurrentChats !== undefined) patch.max_concurrent_chats = input.maxConcurrentChats
+    if (input.autoAssign !== undefined)         patch.auto_assign = input.autoAssign
+    if (input.skills !== undefined)             patch.skills = input.skills
+    if (input.teamId !== undefined)             patch.team_id = input.teamId
+    if (input.slaTier !== undefined)            patch.sla_tier = input.slaTier
 
     const { data, error } = await supabase
       .from('agents')
       .update(patch)
-      .eq('id', id)
+      .eq('id', agentId)
       .select()
       .single()
-
     if (error) throw error
     return toAgent(data)
   }
 
-  async updateStatus(userId: string, status: AgentStatus): Promise<void> {
-    const { error } = await supabase
-      .from('agents')
-      .update({ status, status_changed_at: new Date().toISOString() })
-      .eq('user_id', userId)
-    if (error) throw error
-  }
+  // ───── Suscripción realtime a cambios en agents ─────
+  subscribeToAgentStatus(
+    organizationId: string,
+    onUpdate: (agent: any) => void
+  ): () => void {
+    const channel = supabase
+      .channel(`agents-${organizationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'agents',
+          filter: `organization_id=eq.${organizationId}`
+        },
+        (payload) => onUpdate(payload.new)
+      )
+      .subscribe()
 
-  async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('agents').delete().eq('id', id)
-    if (error) throw error
+    return () => { supabase.removeChannel(channel) }
   }
 }

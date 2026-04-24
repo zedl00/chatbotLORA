@@ -2,10 +2,11 @@
 // EDGE FUNCTION: widget-message (PÚBLICA, sin JWT)
 // Recibe un mensaje del visitante del widget:
 //   1. Valida sesión
-//   2. Si no hay conversación, crea una
-//   3. Inserta mensaje del contacto
-//   4. Si ai_active, invoca claude-chat → respuesta bot
-//   5. Retorna ambos mensajes al widget
+//   2. 🆕 Verifica si el contacto está bloqueado → rechaza
+//   3. Si no hay conversación, crea una
+//   4. Inserta mensaje del contacto
+//   5. Si ai_active, invoca claude-chat → respuesta bot
+//   6. Retorna ambos mensajes al widget
 // ═══════════════════════════════════════════════════════════════
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -45,6 +46,29 @@ Deno.serve(async (req) => {
       .single()
 
     if (sesErr || !session) return json({ error: 'Sesión no encontrada' }, 404)
+
+    // 🆕 Fix B — Sprint 7.5: verificar si el contacto está bloqueado
+    // El contacto puede haber sido bloqueado por un agente después de
+    // crear su sesión. En ese caso, rechazamos todos sus mensajes nuevos.
+    if (session.contact_id) {
+      const { data: contact, error: contactErr } = await admin
+        .from('contacts')
+        .select('blocked')
+        .eq('id', session.contact_id)
+        .maybeSingle()
+
+      if (contactErr) {
+        console.warn('[widget-message] Error verificando contacto bloqueado:', contactErr)
+        // No bloqueamos por error de query: seguimos el flujo normal
+      } else if (contact?.blocked === true) {
+        // 403: el widget mostrará un mensaje genérico al usuario
+        console.info('[widget-message] Mensaje rechazado: contacto bloqueado', session.contact_id)
+        return json({
+          error: 'contact_blocked',
+          message: 'No podemos procesar tu mensaje en este momento.'
+        }, 403)
+      }
+    }
 
     let conversationId = session.conversation_id
 

@@ -1,12 +1,6 @@
 // Ruta: /src/router/index.ts
 // ═══════════════════════════════════════════════════════════════
-// MODIFICADO en Sprint 5 (Multi-tenant):
-//   - Nueva sección de rutas /super-admin/* con superAdminGuard
-//   - Nueva vista: /super-admin/organizations
-//   - Guard orgContextGuard agregado a la cadena
-//
-// MODIFICADO en Sprint 7 (Editor de branding):
-//   - Nueva ruta /admin/branding (editor per-tenant de color, logo, mensajes)
+// MODIFICADO en Sprint 9: ruta /admin/sla-config
 // ═══════════════════════════════════════════════════════════════
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import {
@@ -19,7 +13,6 @@ import {
 } from './guards'
 
 const routes: RouteRecordRaw[] = [
-  // AUTH
   {
     path: '/auth',
     component: () => import('@/layouts/AuthLayout.vue'),
@@ -31,7 +24,6 @@ const routes: RouteRecordRaw[] = [
     ]
   },
 
-  // ADMIN
   {
     path: '/admin',
     component: () => import('@/layouts/AdminLayout.vue'),
@@ -41,22 +33,26 @@ const routes: RouteRecordRaw[] = [
 
       { path: 'dashboard',   name: 'admin.dashboard',   component: () => import('@/modules/reports/views/DashboardView.vue'),    meta: { permission: 'reports.view', title: 'Dashboard' } },
       { path: 'inbox',       name: 'admin.inbox',       component: () => import('@/modules/inbox/views/InboxView.vue'),          meta: { permission: 'conversations.read', title: 'Bandeja' } },
-      { path: 'contacts',    name: 'admin.contacts',    component: () => import('@/modules/contacts/views/ContactsView.vue'),    meta: { permission: 'contacts.read', title: 'Contactos' } },
+
+      { path: 'contacts',          name: 'admin.contacts',         component: () => import('@/modules/contacts/views/ContactsView.vue'),       meta: { permission: 'contacts.read', title: 'Contactos' } },
+      { path: 'contacts/:id',      name: 'admin.contact-detail',   component: () => import('@/modules/contacts/views/ContactDetailView.vue'),  meta: { permission: 'contacts.read', title: 'Detalle del contacto' } },
 
       { path: 'flows',       name: 'admin.flows',       component: () => import('@/modules/flows/views/FlowsView.vue'),          meta: { permission: 'flows.read', title: 'Flujos' } },
       { path: 'knowledge',   name: 'admin.knowledge',   component: () => import('@/modules/knowledge/views/KnowledgeView.vue'),  meta: { permission: 'knowledge.read', title: 'Conocimiento' } },
       { path: 'channels',    name: 'admin.channels',    component: () => import('@/modules/channels/views/ChannelsView.vue'),    meta: { permission: 'channels.read', title: 'Canales' } },
       { path: 'agents',      name: 'admin.agents',      component: () => import('@/modules/agents/views/AgentsView.vue'),        meta: { permission: 'agents.read', title: 'Equipo' } },
-      { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view', title: 'Reportes' } },
 
-      // 🆕 Sprint 7: Editor de branding per-tenant (color, logo, mensajes del widget)
+      { path: 'quick-replies', name: 'admin.quick-replies', component: () => import('@/modules/agents/views/QuickRepliesView.vue'), meta: { permission: 'quick_replies.read', title: 'Respuestas rápidas' } },
+
+      // 🆕 Sprint 9
+      { path: 'sla-config',  name: 'admin.sla-config',  component: () => import('@/modules/settings/views/SlaConfigView.vue'),   meta: { permission: 'sla_config.read', title: 'Configuración de SLA' } },
+
+      { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view', title: 'Reportes' } },
       { path: 'branding',    name: 'admin.branding',    component: () => import('@/modules/settings/views/BrandingView.vue'),    meta: { permission: 'settings.update', title: 'Branding' } },
 
-      // IA
       { path: 'ai-personas', name: 'admin.ai-personas', component: () => import('@/modules/ai/views/AiPersonasView.vue'),        meta: { permission: 'ai.configure', title: 'Personalidades IA' } },
       { path: 'playground',  name: 'admin.playground',  component: () => import('@/modules/playground/views/PlaygroundView.vue'),meta: { permission: 'ai.configure', title: 'Playground' } },
 
-      // Administración
       { path: 'users',       name: 'admin.users',       component: () => import('@/modules/agents/views/UsersView.vue'),         meta: { permission: 'users.read', title: 'Usuarios' } },
       { path: 'roles',       name: 'admin.roles',       component: () => import('@/modules/agents/views/RolesView.vue'),         meta: { permission: 'roles.read', title: 'Roles' } },
       { path: 'invitations', name: 'admin.invitations', component: () => import('@/modules/agents/views/InvitationsView.vue'),   meta: { permission: 'users.invite', title: 'Invitaciones' } },
@@ -65,7 +61,6 @@ const routes: RouteRecordRaw[] = [
     ]
   },
 
-  // SUPER ADMIN — solo accesible para role 'super_admin'
   {
     path: '/super-admin',
     component: () => import('@/layouts/AdminLayout.vue'),
@@ -87,13 +82,6 @@ const routes: RouteRecordRaw[] = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-// ═══ Orden de guards (importante) ═══
-// 1. authGuard: verifica sesión
-// 2. mustChangePasswordGuard: fuerza cambio de contraseña si aplica
-// 3. orgContextGuard: valida contexto de tenant (subdomain)
-// 4. permissionGuard: verifica permisos granulares
-// 5. roleGuard: legacy, solo si meta.roles está presente
-// 6. Guard inline: valida meta.superAdmin = true
 router.beforeEach(authGuard)
 router.beforeEach(mustChangePasswordGuard)
 router.beforeEach(orgContextGuard)

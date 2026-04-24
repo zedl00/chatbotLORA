@@ -1,7 +1,6 @@
 <!-- Ruta: /src/modules/ai/views/AiPersonasView.vue -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
 import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import type { BotPersona, CreateBotPersonaInput } from '@/types/ai.types'
@@ -10,7 +9,6 @@ import {
 } from '@/types/ai.types'
 
 const repo = new SupabaseAiRepo()
-const auth = useAuthStore()
 const activeOrgId = useActiveOrganizationId()
 
 const personas = ref<BotPersona[]>([])

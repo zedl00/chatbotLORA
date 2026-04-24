@@ -1,13 +1,11 @@
 <!-- Ruta: /src/modules/channels/views/ChannelsView.vue -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
 import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { supabase } from '@/services/supabase.client'
 import WidgetConfigEditor from '../components/WidgetConfigEditor.vue'
 import WidgetInstallSnippet from '../components/WidgetInstallSnippet.vue'
 
-const auth = useAuthStore()
 const activeOrgId = useActiveOrganizationId()
 
 interface Channel {

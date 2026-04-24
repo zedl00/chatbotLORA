@@ -1,14 +1,12 @@
 <!-- Ruta: /src/modules/knowledge/views/KnowledgeView.vue -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
 import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import { embedKnowledgeDoc } from '@/services/claude.service'
 import type { KnowledgeDoc } from '@/types/ai.types'
 import { formatDateShort } from '@/utils/format'
 
-const auth = useAuthStore()
 const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseAiRepo()
 

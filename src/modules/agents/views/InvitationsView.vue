@@ -1,12 +1,10 @@
 <!-- Ruta: /src/modules/agents/views/InvitationsView.vue -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
 import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseRbacRepo } from '@/repository/supabase/rbac.repo'
 import type { InvitationWithRole } from '@/types/rbac.types'
 
-const auth = useAuthStore()
 const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseRbacRepo()
 

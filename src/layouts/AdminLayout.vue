@@ -1,32 +1,33 @@
 <!-- Ruta: /src/layouts/AdminLayout.vue -->
 <!-- ═══════════════════════════════════════════════════════════════
-     MODIFICADO en Sprint 6:
-       - Agregado SupportModeBanner arriba del panel
-       - Banner solo aparece si super_admin está operando en otra org
-
-     Sprint 5 (mantenido):
-       - Sección "LORA Admin" visible solo para role 'super_admin'
-       - Header muestra el nombre/logo de la org activa (tenant)
-       - Branding dinámico vía organization.store
+     MODIFICADO en Sprint 9:
+       - SupervisorAlerts badge en el header (alertas escalamientos)
+       - Menú "Config SLA" en sección Configuración
      ═══════════════════════════════════════════════════════════════ -->
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { useUiStore } from '@/stores/ui.store'
+import { useAgentStore } from '@/stores/agent.store'
 import { useCan } from '@/composables/useCan'
 import { useDocumentTitle } from '@/composables/useDocumentTitle'
+import { usePresence } from '@/composables/usePresence'
 import { useOrganizationStore } from '@/stores/organization.store'
 import LoraLogo from '@/components/LoraLogo.vue'
 import SupportModeBanner from '@/components/SupportModeBanner.vue'
+import AgentStatusBadge from '@/components/AgentStatusBadge.vue'
+import SupervisorAlerts from '@/components/SupervisorAlerts.vue'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
 const orgStore = useOrganizationStore()
+const agentStore = useAgentStore()
 const router = useRouter()
 const { can } = useCan()
 
 useDocumentTitle()
+usePresence()
 
 onMounted(() => {
   orgStore.applyBrandingToDOM()
@@ -56,6 +57,9 @@ const navItems: NavItem[] = [
   { to: '/admin/flows',        label: 'Flujos',       icon: '🔀', permission: 'flows.read',     section: 'Configuración' },
   { to: '/admin/channels',     label: 'Canales',      icon: '🔌', permission: 'channels.read',  section: 'Configuración' },
   { to: '/admin/agents',       label: 'Equipo',       icon: '🧑‍💼', permission: 'agents.read',  section: 'Configuración' },
+  { to: '/admin/quick-replies', label: 'Respuestas rápidas', icon: '💬', permission: 'quick_replies.read', section: 'Configuración' },
+  // 🆕 Sprint 9
+  { to: '/admin/sla-config',   label: 'Config SLA',   icon: '⏰', permission: 'sla_config.read', section: 'Configuración' },
   { to: '/admin/reports',      label: 'Reportes',     icon: '📈', permission: 'reports.view',   section: 'Configuración' },
   { to: '/admin/branding',     label: 'Branding',     icon: '🎨', permission: 'settings.update', section: 'Configuración' },
 
@@ -87,15 +91,18 @@ const visibleNavGrouped = computed(() => {
 })
 
 async function handleSignOut() {
+  if (authStore.user?.id) {
+    await agentStore.markOffline(authStore.user.id)
+  }
   await authStore.signOut()
   orgStore.clear()
+  agentStore.clear()
   router.push({ name: 'auth.login' })
 }
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col bg-surface-muted">
-    <!-- 🆕 Sprint 6: Banner de modo soporte arriba de TODO -->
     <SupportModeBanner />
 
     <div class="flex-1 flex">
@@ -181,10 +188,14 @@ async function handleSignOut() {
       </aside>
 
       <div class="flex-1 flex flex-col min-w-0">
-        <header class="h-16 bg-white border-b border-surface-border px-6 flex items-center justify-between">
+        <header class="h-16 bg-white border-b border-surface-border px-6 flex items-center justify-between gap-4">
           <h1 class="text-lg font-semibold text-slate-800">{{ $route.meta.title ?? '' }}</h1>
 
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3">
+            <!-- 🆕 Sprint 9: Supervisor Alerts -->
+            <SupervisorAlerts v-if="authStore.user" />
+            <AgentStatusBadge v-if="authStore.user" />
+
             <div class="text-right text-sm">
               <div class="font-medium">{{ authStore.user?.fullName ?? authStore.user?.email }}</div>
               <div class="text-slate-500 capitalize text-xs">

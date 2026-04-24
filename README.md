@@ -1,257 +1,345 @@
-# 🚀 Sprint 6 + 7 — Modo soporte + Editor de branding
+# 🦸 Sprint 9 — Supervisor Tools
 
-Este paquete agrega 2 funcionalidades a LORA:
-
-- **Sprint 6:** Modo soporte super_admin (banner + logs + confirmaciones)
-- **Sprint 7:** Editor de branding per-tenant (color, logo, mensajes del widget)
+El cuadrante **C** del Agent Workspace: herramientas para que supervisores y admins tomen control, guíen agentes en vivo, y respondan ante breaches de SLA.
 
 ---
 
-## 📋 Resumen de cambios
+## 📦 Archivos incluidos (13)
 
-| Tipo | Archivo | Sprint |
+| Ruta | Tipo | Descripción |
 |---|---|---|
-| 🆕 SQL | `supabase/migrations/20260423_sprint6_7_storage_support.sql` | 6+7 |
-| 🆕 Composable | `src/composables/useSupportMode.ts` | 6 |
-| 🆕 Composable | `src/composables/useLogoUpload.ts` | 7 |
-| 🆕 Componente | `src/components/SupportModeBanner.vue` | 6 |
-| 🔧 Modificado | `src/layouts/AdminLayout.vue` | 6 |
-| 🆕 Componente | `src/modules/settings/components/LogoUploader.vue` | 7 |
-| 🆕 Vista | `src/modules/settings/views/BrandingView.vue` | 7 |
-| 🔧 Modificado | `src/router/index.ts` (agrega ruta /admin/branding) | 7 |
+| `supabase/migrations/2026_sprint_9.sql` | 🆕 Migración | Tablas + RPCs + permisos + cron |
+| `src/types/supervisor.types.ts` | 🆕 Tipos | Escalation, SlaConfig, ESCALATION_TYPE_LABELS |
+| `src/repository/supabase/supervisor.repo.ts` | 🆕 Repo | takeover, whisper, reassign, escalations |
+| `src/repository/supabase/sla-config.repo.ts` | 🆕 Repo | CRUD de config SLA |
+| `src/stores/escalations.store.ts` | 🆕 Store | Lista reactiva + realtime |
+| `src/components/SupervisorAlerts.vue` | 🆕 Componente | Badge 🚨 en header |
+| `src/modules/inbox/components/TakeoverButton.vue` | 🆕 Componente | 🦸 Tomar control |
+| `src/modules/inbox/components/ReassignDropdown.vue` | 🆕 Componente | 🔄 Reasignar |
+| `src/modules/inbox/components/EscalationBanner.vue` | 🆕 Componente | Banner en conv escalada |
+| `src/modules/inbox/components/ConversationThread.vue` | 🔧 Reemplazar | + whisper mode + system messages |
+| `src/modules/settings/views/SlaConfigView.vue` | 🆕 Vista | Config SLA por tenant |
+| `src/layouts/AdminLayout.vue` | 🔧 Reemplazar | + SupervisorAlerts + menú SLA |
+| `src/router/index.ts` | 🔧 Reemplazar | + ruta sla-config |
 
 ---
 
-## 🔧 Instalación paso a paso
+## 🚀 Aplicación
 
-### Paso 1: Aplicar migración SQL
+### Paso 1: SQL (crítico, orden importante)
 
-1. Abre Supabase Dashboard → SQL Editor
-2. Copia el contenido de `supabase/migrations/20260423_sprint6_7_storage_support.sql`
-3. Ejecuta
-4. Al final verás la verificación:
-   ```
-   status='Sprint 6+7 migración aplicada'
-   buckets_creados=1
-   policies_storage=4
-   funciones=1
-   ```
+Supabase → SQL Editor → pega `supabase/migrations/2026_sprint_9.sql` → Run.
 
-### Paso 2: Copiar archivos al proyecto
-
-Todos los archivos de este ZIP tienen su **ruta completa desde `/src`**.
-Copia cada archivo a su destino respectivo en tu proyecto:
+**Verifica al final** que veas:
 
 ```
-sprint-6-7/src/composables/useSupportMode.ts
-  → C:\xampp\htdocs\proyectos\chatbot\src\composables\useSupportMode.ts
-
-sprint-6-7/src/composables/useLogoUpload.ts
-  → C:\xampp\htdocs\proyectos\chatbot\src\composables\useLogoUpload.ts
-
-sprint-6-7/src/components/SupportModeBanner.vue
-  → C:\xampp\htdocs\proyectos\chatbot\src\components\SupportModeBanner.vue
-
-sprint-6-7/src/layouts/AdminLayout.vue
-  → (REEMPLAZAR) C:\xampp\htdocs\proyectos\chatbot\src\layouts\AdminLayout.vue
-
-sprint-6-7/src/modules/settings/components/LogoUploader.vue
-  → C:\xampp\htdocs\proyectos\chatbot\src\modules\settings\components\LogoUploader.vue
-
-sprint-6-7/src/modules/settings/views/BrandingView.vue
-  → C:\xampp\htdocs\proyectos\chatbot\src\modules\settings\views\BrandingView.vue
-
-sprint-6-7/src/router/index.ts
-  → (VER NOTA ABAJO) C:\xampp\htdocs\proyectos\chatbot\src\router\index.ts
+sla_configs_created  : 3 (una por cada org que tengas)
+escalations_table    : true
+rpcs                 : 4 (detect_sla_breaches, supervisor_takeover, send_whisper, reassign_conversation)
+permissions          : 6
 ```
 
-#### ⚠️ Nota sobre router/index.ts
+#### ⚠️ Sobre pg_cron
 
-El archivo `src/router/index.ts` es una REFERENCIA. Tu proyecto puede tener
-más rutas que no quiero pisar. Agrega manualmente estas líneas en tu router:
+Al final del SQL verás un mensaje: `lora_detect_sla_breaches programado` o `pg_cron NO disponible`.
 
-**1. En los imports (arriba del archivo):**
-```ts
-const BrandingView = () => import('@/modules/settings/views/BrandingView.vue')
-```
+- Si está disponible: ya corre cada 1 min server-side ✅
+- Si no: puedes correr manualmente `SELECT detect_sla_breaches();` cuando quieras probar
 
-**2. En las children de `/admin` (dentro del AdminLayout):**
-```ts
-{
-  path: 'branding',
-  name: 'admin.branding',
-  component: BrandingView,
-  meta: {
-    requiresAuth: true,
-    title: 'Branding',
-    permission: 'settings.update'
-  }
-},
-```
+---
 
-Ponla antes de `{ path: 'users', ... }` para mantener el orden.
+### Paso 2: Copiar los 12 archivos de frontend
 
-### Paso 3: Probar localmente
+Respeta estructura completa `/src/...`
 
-```powershell
-npm run dev
-```
-
-#### Test 1 — Modo soporte (Sprint 6)
-1. Login como super_admin (nestorvaldez@hotmail.com)
-2. Cambia `.env.local` a `VITE_DEV_SUBDOMAIN=capitali`
-3. Reinicia `npm run dev`
-4. Recarga localhost
-5. **Deberías ver banner naranja arriba:** "Modo soporte activo"
-6. Botón "← Volver a mi panel" te lleva a admin
-
-#### Test 2 — Login normal NO muestra banner
-1. Logout
-2. Cambia `.env.local` a `VITE_DEV_SUBDOMAIN=` (vacío)
-3. Login como super_admin
-4. **NO debe aparecer banner** (estás en tu propio panel)
-
-#### Test 3 — Editor de branding (Sprint 7)
-1. Login como admin de una empresa (capitalird@gmail.com)
-2. Ve al menú lateral → **"Branding"** (ícono 🎨)
-3. Prueba cada funcionalidad:
-   - Subir un logo (drag & drop)
-   - Cambiar el color primario
-   - Editar el título de bienvenida
-4. Click en **"Guardar cambios"**
-5. Recarga la página → los cambios persisten ✓
-6. El sidebar ahora muestra el logo (si subiste uno)
-
-### Paso 4: Build de producción
+### Paso 3: Build
 
 ```powershell
 npm run build
 ```
 
-Si sale algún error de TypeScript, pégamelo y lo arreglo.
+**Si hay error**, pégamelo. El punto más probable de fallo: imports de tipos (`AgentLive`, `AgentStatus`).
 
-### Paso 5: Deploy via FTP
+### Paso 4: Dev
 
-1. Sube `dist/` a `/public_html/admin.lorachat.net/`
-2. Prueba en incógnita:
-   - `admin.lorachat.net` como super_admin → sin banner
-   - `capitali.lorachat.net` como super_admin → CON banner
-   - `capitali.lorachat.net` como capitalird → ver menú Branding
-
----
-
-## 🎯 Lo que logras con este paquete
-
-### Sprint 6 — Modo soporte
-
-✅ Banner naranja visible cuando super_admin entra a tenant ajeno
-✅ Botón rápido "Volver a mi panel"
-✅ Logs de auditoría con prefix `support_mode.*`
-✅ Función SQL para registrar acciones (disponible para otros módulos)
-
-### Sprint 7 — Editor de branding
-
-✅ Upload de logo con drag & drop (PNG/JPG/WEBP/SVG, máx 2MB)
-✅ Color picker con preview en vivo
-✅ Editor de mensajes del widget (bienvenida, offline)
-✅ Preview del widget al lado (igual al del wizard)
-✅ Permisos: solo admins con `settings.update`
-✅ Super_admin puede editar branding de cualquier empresa (modo soporte)
-
----
-
-## 🗂️ Storage en Supabase
-
-Después de aplicar la migración, verás en Supabase → Storage:
-
-```
-📁 organization-logos (bucket público)
-   📁 {org_id_1}/
-      └── logo-1234567890.png
-   📁 {org_id_2}/
-      └── logo-9876543210.jpg
+```powershell
+npm run dev
 ```
 
-Las policies aseguran que:
-- Cualquiera puede **leer** (necesario para el widget público)
-- Solo admins de la org pueden **subir/borrar** en su carpeta
-- Super_admin puede gestionar cualquier carpeta
-
 ---
 
-## 🧪 Comandos útiles para debugging
+## 🧪 Testing completo (10 tests)
 
-### Ver logs de super_admin en BD
+### Test 1 — Badge SupervisorAlerts visible en header
+
+1. Login como super_admin o admin
+2. Mira arriba a la derecha
+
+**✅ Esperado:** ves el badge 🚨 con "0" (no hay alertas aún)
+
+**❌ Si no aparece:** verifica permiso `escalations.read`. Corre:
 ```sql
-SELECT
-  created_at,
-  action,
-  u.email AS super_admin,
-  o.name AS target_org,
-  changes
-FROM audit_logs al
-JOIN users u ON u.id = al.user_id
-JOIN organizations o ON o.id = al.organization_id
-WHERE action LIKE 'support_mode.%'
-ORDER BY created_at DESC
-LIMIT 10;
+SELECT * FROM role_permissions rp 
+JOIN permissions p ON p.id = rp.permission_id 
+WHERE p.key = 'escalations.read';
 ```
+Debería devolver filas.
 
-### Ver logos subidos
-```sql
-SELECT
-  name,
-  created_at,
-  ROUND((metadata->>'size')::numeric / 1024, 1) AS kb
-FROM storage.objects
-WHERE bucket_id = 'organization-logos'
-ORDER BY created_at DESC;
-```
+---
 
-### Limpiar logos huérfanos
-```sql
--- (opcional, si hay logos de empresas que ya se borraron)
-DELETE FROM storage.objects
-WHERE bucket_id = 'organization-logos'
-  AND (storage.foldername(name))[1] NOT IN (
-    SELECT id::text FROM organizations
-  );
+### Test 2 — Config SLA funciona
+
+1. Sidebar → **Configuración → ⏰ Config SLA**
+2. URL: `/admin/sla-config`
+
+**✅ Esperado:**
+- Carga con valores: `5 minutos`, `Notificar supervisores: ON`, `SLA activo: ON`
+- Si cambias a 10 y guardas → toast verde
+
+---
+
+### Test 3 — Whisper mode (la feature más cool 🤫)
+
+1. Inbox → abre una conversación **que estés atendiendo tú**
+2. En el editor, abajo a la izquierda ves un toggle:
+   `🤫 Whisper`
+3. Click → el toggle se pone ámbar, textarea cambia a fondo amarillo, placeholder dice "Mensaje privado al equipo"
+4. Escribe: `Dale 20% de descuento pero no ofrezcas más`
+5. Click en el botón ámbar `🤫`
+
+**✅ Esperado:**
+- Toast "Whisper enviado al equipo"
+- Aparece un bubble amarillo con borde punteado arriba, tipo:
+  ```
+  🤫 WHISPER · VISIBLE SOLO AL EQUIPO
+  Dale 20% de descuento pero no ofrezcas más
+  ```
+- El cliente (en el widget) NO ve este mensaje
+
+**⚠️ Para verificar que el cliente no lo ve:**
+- Abre el widget de tu sitio de prueba con esa misma conversación (el contacto)
+- Los mensajes whisper NO deberían mostrarse ahí
+
+---
+
+### Test 4 — Takeover funciona
+
+Necesitas 2 usuarios diferentes para este test.
+
+1. **Usuario A** (admin o supervisor): toma una conversación ("🙋 Tomar")
+2. **Usuario B** (otro admin/supervisor): entra al mismo Inbox, abre esa conversación
+3. Usuario B ve en el header el botón: **🦸 Tomar control** (ámbar)
+4. Click en "Tomar control" → confirma
+
+**✅ Esperado:**
+- Usuario B: toast "Has tomado el control"
+- Aparece mensaje de sistema (pill gris centrado): "Un supervisor tomó el control de esta conversación."
+- Usuario A: si tiene la conv abierta, verá que ya no puede enviar mensajes
+- Se registra un evento `takeover` en tabla `escalations`
+
+---
+
+### Test 5 — Reasignación manual
+
+1. En una conversación que estés atendiendo tú
+2. Click en botón **🔄 Reasignar ▾**
+
+**✅ Esperado:**
+- Dropdown con lista de agentes disponibles
+- Cada uno con dot de color (online/busy/away/offline)
+- Agentes que no eres tú
+
+3. Click en otro agente → confirma
+
+**✅ Esperado:**
+- Toast: "Conversación reasignada a X"
+- Mensaje sistema: "Conversación reasignada a X"
+- La conv ya no aparece como tuya
+
+---
+
+### Test 6 — SLA breach detectado (toma 5+ min)
+
+1. Config SLA = 2 minutos (cambia temporalmente para probar rápido)
+2. Deja que un contacto escriba por el widget
+3. Toma la conversación como agente A
+4. **NO respondas durante 2+ minutos**
+5. Corre manualmente: `SELECT detect_sla_breaches();` en SQL Editor  
+   *(o espera al cron si pg_cron está activo)*
+
+**✅ Esperado:**
+- El badge del header cambia a 🚨 con "1"
+- Si entras a la conversación, aparece banner rojo arriba: **"SLA vencido - El agente no respondió..."**
+- Se crea fila en tabla `escalations` con `type = 'sla_breach'`
+
+---
+
+### Test 7 — Resolver breach automáticamente
+
+Continuando del Test 6:
+
+1. Respóndele al cliente algo cualquiera
+2. Refresca (o espera)
+
+**✅ Esperado:**
+- El banner desaparece
+- Badge vuelve a 0
+- Tabla `escalations`: ese breach tiene `resolved = true`
+
+---
+
+### Test 8 — Dropdown de alertas del header
+
+1. Con al menos 1 escalation activa
+2. Click en el badge 🚨
+
+**✅ Esperado:**
+- Dropdown con lista
+- Cada item: emoji (🚨/🦸/🔄), nombre del contacto, info del evento, tiempo relativo
+- Click en un item → lleva al Inbox con esa conv seleccionada
+
+---
+
+### Test 9 — Resolver manualmente desde banner
+
+1. Entra a conversación con banner rojo
+2. Click en **"✓ Marcar como visto"** (derecha del banner)
+
+**✅ Esperado:**
+- Banner desaparece
+- Toast: "Alerta resuelta"
+
+---
+
+### Test 10 — Permisos funcionan
+
+1. Crea un usuario con role `agent` (sin escalations.read)
+2. Login como ese agent
+3. Verifica:
+
+**✅ Esperado:**
+- NO ve el badge 🚨 en header
+- NO ve el botón 🦸 Tomar control en conversaciones de otros
+- NO ve el botón 🔄 Reasignar
+- NO ve el toggle 🤫 Whisper
+- NO ve "Config SLA" en el sidebar
+
+---
+
+## 🔐 Matriz de permisos
+
+| Permiso | agent | supervisor | admin | super_admin |
+|---|---|---|---|---|
+| conversations.takeover | ❌ | ✅ | ✅ | ✅ |
+| conversations.whisper  | ❌ | ✅ | ✅ | ✅ |
+| conversations.reassign | ❌ | ✅ | ✅ | ✅ |
+| sla_config.read        | ❌ | ✅ | ✅ | ✅ |
+| sla_config.update      | ❌ | ❌ | ✅ | ✅ |
+| escalations.read       | ❌ | ✅ | ✅ | ✅ |
+
+---
+
+## 🎨 UX detalles implementados
+
+- **Badge en header rojo** solo si hay alertas; gris sin ellas
+- **Banner de escalation** color-coded por tipo (rojo=sla, ámbar=takeover, azul=reassign)
+- **Whisper bubbles** con fondo amarillo + borde punteado para que sean inconfundibles
+- **Messages system** como pills centradas en gris (no interrumpen el flujo del chat)
+- **Dropdown de reasignación** muestra estado live de cada agente (online primero)
+- **Confirmaciones** en acciones irreversibles (takeover, reassign)
+- **Realtime automático** en el badge y los banners (no requiere recargar)
+
+---
+
+## 💾 Commit sugerido
+
+```bash
+git add -A
+git commit -m "feat(sprint-9): Supervisor Tools completo
+
+- SQL: tabla sla_configs, escalations; RPCs takeover/whisper/
+  reassign/detect_sla_breaches; triggers de first_response_at y
+  sla_due_at; 6 permisos nuevos; cron pg_cron cada 1 min.
+- Supervisor tools: takeover de conversaciones, whisper privado
+  al equipo, reasignación entre agentes.
+- Banner de escalation en conversaciones con SLA breach, takeover
+  o reassign.
+- Badge de alertas en header con dropdown de escalamientos activos
+  (realtime).
+- Vista /admin/sla-config con toggle enable, minutos, notif.
+- ConversationThread: toggle whisper mode con UI ámbar distintiva,
+  bubbles diferenciados para whisper y system messages.
+- RBAC: solo supervisor y admin acceden a supervisor tools."
 ```
 
 ---
 
-## ❓ Troubleshooting
+## 🐛 Troubleshooting
 
-### "New row violates row-level security policy"
-La policy de upload falló. Verifica:
-- Estás logueado
-- Tu user tiene `role='admin'` o `role='super_admin'`
-- El path del archivo empieza con tu `organization_id`
+### "ambiguous relationship" en queries de escalations
+Es el mismo patrón de PGRST201 que vimos en Sprint 6.8. Si aparece, corre:
+```sql
+-- Verificar constraints colisionantes
+SELECT constraint_name, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'escalations'::regclass;
+```
 
-### El banner de modo soporte no aparece
-Verifica:
-- Eres super_admin (`users.role = 'super_admin'`)
-- Tu `organizationId` ≠ `orgStore.current.id`
-- Estás en un subdomain (no localhost sin VITE_DEV_SUBDOMAIN)
+**Si ves múltiples constraints hacia users** (esperado: 4 — `actor_id`, `from_user_id`, `to_user_id`, `resolved_by`), todos deben tener nombres únicos. PostgREST usa esos nombres para el embed explícito.
 
-### El logo no aparece en el sidebar después de subirlo
-Recarga la página. El `orgStore.current.logoUrl` se actualiza al momento,
-pero si estabas en otra pestaña puede tener cache del estado anterior.
+**Fix si hay conflicto**:
+```sql
+-- Ejemplo: si el constraint tiene un nombre duplicado
+ALTER TABLE escalations 
+  DROP CONSTRAINT escalations_actor_id_fkey,
+  ADD CONSTRAINT escalations_actor_user_fkey
+    FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL;
+```
+Luego ajusta `supervisor.repo.ts` para usar el nuevo nombre en el embed.
+
+### "check constraint violation" al insertar mensaje
+El `CHECK constraint` nuevo rechazó un sender_type inválido. Verifica:
+```sql
+SELECT DISTINCT sender_type FROM messages;
+```
+Si hay algo que no sea contact/agent/bot/whisper/system, ajustamos el constraint.
+
+### El badge no se actualiza en tiempo real
+Verifica que Realtime está habilitado para tabla `escalations`:
+Dashboard → Database → Replication → marca `escalations` como enabled.
+
+### "No tengo permiso para whisper/takeover/reassign"
+Tu rol no tiene el permiso asignado. Verifica:
+```sql
+SELECT u.email, r.key AS role, p.key AS permission
+FROM users u
+JOIN user_roles ur ON ur.user_id = u.id
+JOIN roles r ON r.id = ur.role_id
+JOIN role_permissions rp ON rp.role_id = r.id
+JOIN permissions p ON p.id = rp.permission_id
+WHERE u.id = 'tu-user-id' AND p.key LIKE 'conversations.%';
+```
+
+### No se detectan breaches automáticamente
+1. Verifica que `sla_configs.enabled = true` para tu org
+2. Verifica `sla_due_at` en conversations: debe estar lleno
+3. Corre manualmente: `SELECT detect_sla_breaches();`
+4. Si pg_cron no está disponible, puedes programar cron alternativo (Edge Function con Supabase Scheduler)
 
 ---
 
-## 🎯 Próximos sprints sugeridos
+## 🎯 Sprint 9 COMPLETO ✅
 
-Después de deployar este paquete, los siguientes pasos recomendados son:
+Cuadrante C del Agent Workspace terminado. Ahora:
 
-**Sprint 8 — Email automático de invitaciones (2h)**
-Para que las empresas nuevas reciban el link por email automáticamente
-en lugar del copy-paste manual del wizard.
+**Sprint 10 — Agent Analytics** (cuadrante D):
+- Métricas por agente (FRT, CSAT, resueltas)
+- Leaderboard semanal
+- Horarios de mayor carga
+- Exportar CSV
 
-**Sprint 9 — Telegram como 2do canal (2-3h)**
-Primer canal adicional al widget web. Amplía el mercado de clientes.
-
-**Sprint 11 — Facturación Stripe (6h)**
-Monetización: 3 planes (Starter / Pro / Business) con gates por features.
-
-¡Listo para seguir después del deploy! 🚀
+**O puedes enfocar primero en:**
+- Pre-chat widget (Entrega 2.5 pendiente)
+- Deploy producción
+- Telegram
+- Landing page
