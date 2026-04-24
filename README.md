@@ -1,232 +1,284 @@
-# 📊 Sprint 10 — Agent Analytics
+# 📝 Sprint 11 — Widget Update + Pre-chat + Post-chat
 
-El cuadrante **D** del Agent Workspace: dashboard completo de métricas con 7 gráficos, 6 filtros enterprise, y export CSV.
+Widget web completamente reimaginado: configurable, con pre-chat form (obligatorio u opcional), post-chat CSAT, y sistema de ayuda in-app integrado.
 
 ---
 
-## 📦 Archivos incluidos (16)
+## 📦 Archivos (14)
 
 | Ruta | Tipo | Descripción |
 |---|---|---|
-| `supabase/migrations/2026_sprint_10.sql` | 🆕 SQL | Permisos + 2 vistas + RPC heatmap + seed 50 convs |
-| `src/types/analytics.types.ts` | 🆕 Tipos | Filtros, summary, charts, helpers de fechas |
-| `src/repository/supabase/analytics.repo.ts` | 🆕 Repo | Queries y cálculos de métricas |
-| `src/modules/analytics/views/AnalyticsView.vue` | 🆕 Vista | Página principal con 4 tabs |
-| `src/modules/analytics/components/DateRangePicker.vue` | 🆕 | Selector con 10 presets + custom |
-| `src/modules/analytics/components/MetricCard.vue` | 🆕 | Card reutilizable con deltas |
-| `src/modules/analytics/components/VolumeLineChart.vue` | 🆕 | Gráfico línea con comparativo |
-| `src/modules/analytics/components/StatusDonutChart.vue` | 🆕 | Dona de estados (4 segmentos) |
-| `src/modules/analytics/components/TopAgentsBarChart.vue` | 🆕 | Barras horizontales top 5 |
-| `src/modules/analytics/components/HourlyHeatmap.vue` | 🆕 | Heatmap 7 × 24 horas |
-| `src/modules/analytics/components/AgentRadarChart.vue` | 🆕 | Radar 5 ejes por agente |
-| `src/modules/analytics/components/FrtVolumeBubbleChart.vue` | 🆕 | Bubble FRT vs volumen |
-| `src/modules/analytics/components/ExportCsvButton.vue` | 🆕 | Export conversaciones/agentes |
-| `src/modules/analytics/tabs/LeaderboardTab.vue` | 🆕 | Ranking con 🥇🥈🥉 |
-| `src/modules/analytics/tabs/ComparativoTab.vue` | 🆕 | Tabla vs período anterior |
-| `src/layouts/AdminLayout.vue` | 🔧 | + menú "📈 Analytics" |
-| `src/router/index.ts` | 🔧 | + ruta /admin/analytics |
+| `supabase/migrations/2026_sprint_11.sql` | 🆕 SQL | Default settings, helper RPC, permiso |
+| `supabase/functions/widget-config/index.ts` | 🆕 Edge | Endpoint público para leer settings |
+| `supabase/functions/widget-csat/index.ts` | 🆕 Edge | Recibe rating del post-chat |
+| `src/types/widget.types.ts` | 🆕 Tipos | Todos los tipos + defaults + merge helper |
+| `src/repository/supabase/widget-config.repo.ts` | 🆕 Repo | CRUD de settings |
+| `src/modules/channels/views/WidgetConfigView.vue` | 🆕 Vista | Vista principal con tabs |
+| `src/modules/channels/components/widget-config/WidgetAppearanceTab.vue` | 🆕 | Colores, posición, logo, mensajes |
+| `src/modules/channels/components/widget-config/WidgetPreChatTab.vue` | 🆕 | Editor completo pre-chat |
+| `src/modules/channels/components/widget-config/WidgetPostChatTab.vue` | 🆕 | Editor post-chat CSAT |
+| `src/modules/channels/components/widget-config/WidgetInstallationTab.vue` | 🆕 | Snippet + instrucciones |
+| `src/modules/channels/components/widget-config/WidgetFieldEditor.vue` | 🆕 | Fila individual de campo |
+| `src/modules/channels/components/widget-config/help/HelpTooltip.vue` | 🆕 | Tooltip premium reutilizable |
+| `src/modules/channels/components/widget-config/help/WidgetConfigHelpPanel.vue` | 🆕 | Panel slide-in con docs |
+| `src/router/index.ts` | 🔧 | + ruta `/admin/channels/widget/:id` |
+| `public/widget.js` | 🔄 | REEMPLAZADO - con pre-chat + post-chat + settings dinámicos |
 
 ---
 
-## 🚀 Aplicación
+## 🚀 Aplicación paso a paso
 
-### Paso 1: SQL (crítico)
+### 1. SQL (Supabase SQL Editor)
 
-Supabase → SQL Editor → pega el contenido completo de `2026_sprint_10.sql` → Run.
+Pega `2026_sprint_11.sql` → Run.
 
-**Verifica que al final veas:**
+**Verificaciones esperadas:**
 ```
-permisos:            2
-vista_analytics:     true
-vista_agent_metrics: true
-rpc_heatmap:         true
-seed_conversations:  50
-seed_por_estado:
-  abandoned: 5
-  open:      7
-  pending:   8
-  resolved:  30
+widgets_with_settings        : 3 (tus 3 widgets actuales ahora tienen defaults)
+helper_function              : true
+permission_channels_configure: true
 ```
 
-✅ Si los 5 checks pasan, continúa.
+### 2. Deploy Edge Functions
 
-### Paso 2: Copiar archivos
+Necesitas subir 2 funciones nuevas:
 
-Copia las **16 rutas** respetando estructura desde `/src/`.
+**widget-config:**
+```bash
+cd supabase/functions
+# Asegúrate de tener supabase CLI instalado: npm install -g supabase
+supabase functions deploy widget-config --project-ref imvahmyywbtcfsduwbdq --no-verify-jwt
+```
 
-### Paso 3: Build
+**widget-csat:**
+```bash
+supabase functions deploy widget-csat --project-ref imvahmyywbtcfsduwbdq --no-verify-jwt
+```
+
+⚠️ **`--no-verify-jwt` es crítico**: hace la función pública (accesible desde el widget en sitios del cliente).
+
+Si no tienes supabase CLI, puedes deployarlos manualmente:
+- Dashboard → Edge Functions → New Function
+- Nombre: `widget-config` (exacto)
+- Pega el contenido de `supabase/functions/widget-config/index.ts`
+- Marca "Invocable without JWT" (muy importante)
+- Deploy
+
+Repite para `widget-csat`.
+
+### 3. Copiar archivos frontend
+
+Copia los 13 archivos respetando estructura `/src/...` y `/public/widget.js`.
+
+### 4. Actualizar widget.js con la anon key
+
+Abre `public/widget.js`, línea ~27:
+```js
+const SUPABASE_ANON_KEY = window.LORA_SUPABASE_ANON_KEY || ''
+```
+
+**Opción A (recomendada):** en build time inyecta la anon key desde variable de entorno.
+
+**Opción B (simple):** hardcodea tu anon key pública:
+```js
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5c...' // tu anon key
+```
+
+Recuerda que la **anon key es pública** (ya está en tu app principal), no es un secreto.
+
+### 5. Build
 
 ```powershell
-cd C:\xampp\htdocs\proyectos\chatbot
 npm run build
 ```
 
-Si pasa sin errores TS → Paso 4. Si falla → pégame el error.
+### 6. Deploy FTP
 
-### Paso 4: Deploy FTP
-
-```
-CoreFTP → ftp.jabenter.com → usuario lora@jabenter.com
-→ /public_html/lora/
-→ Borrar contenido
-→ Subir todo el contenido de dist/
-```
-
-### Paso 5: Verificar en lora.jabenter.com
-
-1. Login
-2. Click en el nuevo menú **"📈 Analytics"** arriba del sidebar
-3. URL: `/admin/analytics`
-
-**✅ Esperado:** dashboard carga con datos seed.
+Sube todo `dist/` a `/public_html/lora/` como siempre.
 
 ---
 
-## 🧪 Tests de verificación
+## 🧪 Tests en producción
 
-### Test 1 — Dashboard carga con datos
+### Test 1 — Vista de configuración carga
 
-Debes ver:
-- **Banner azul/verde** "Este período vs anterior..."
-- **5 metric cards** con números reales
-- **Tab "Dashboard" activo** con 6 gráficos + preview leaderboard
+1. Login en `lora.jabenter.com`
+2. Sidebar → **Canales** → clic en un widget web
+3. Debería abrir `/admin/channels/widget/:id`
+4. ✅ Verás: tabs (Apariencia, Pre-chat, Post-chat, Instalación)
 
-### Test 2 — Selector de fechas
-
-1. Click en el botón `📅 Últimos 7 días`
-2. Dropdown con grupos: Rápidos / Por mes / Últimos N días / Año / Personalizado
-
-**Prueba:**
-- Click "Hoy" → dashboard se actualiza (probablemente vacío si no hay convs de hoy)
-- Click "Últimos 30 días" → deberías ver los 50 seed
-- Click "Personalizado" → date inputs + botón Aplicar
-
-### Test 3 — Filtros enterprise
-
-Prueba cada uno:
-- **Agente:** dropdown con nombres (filtra el dashboard)
-- **Canal:** web_widget / WhatsApp / etc.
-- **Estado:** Abiertas / Pendientes / Resueltas / Abandonadas
-- **Prioridad:** Sin / Baja / Media / Alta
-- **Equipo:** si existe tabla teams (si no, el selector no aparece)
-
-### Test 4 — Los 7 gráficos
-
-Scroll en tab Dashboard:
-
-1. **📈 Línea volumen diario** — línea azul sólida (actual) + punteada (anterior)
-2. **🍩 Dona estados** — 4 colores con leyenda
-3. **📊 Top agentes** — barras horizontales con initiales
-4. **🎯 Radar agente** — pentágono con dropdown para elegir agente
-5. **🔥 Heatmap** — grid 7×24 con colores purple
-6. **🫧 Bubble** — burbujas coloreadas por CSAT
-7. **🏆 Leaderboard preview** — top 3 abajo
-
-### Test 5 — Tab Leaderboard
-
-Click tab **🏆 Leaderboard**:
-- Lista completa con medallas 🥇🥈🥉
-- Info: resueltas, FRT, CSAT, % resolución, volumen
-
-### Test 6 — Tab Horarios
-
-Click tab **🔥 Horarios**:
-- Heatmap grande con leyenda de intensidad
-- Hover en cada celda muestra: "Lun 14:00 — X conversaciones"
-
-### Test 7 — Tab Comparativo
-
-Click tab **🎯 Comparativo**:
-- 4 cards comparando período actual vs anterior:
-  - Volumen, Resueltas, FRT, CSAT
-- Deltas en verde (mejor) o rojo (peor)
-
-### Test 8 — Export CSV
-
-Hover sobre botón **📥 Exportar CSV**:
-- 2 opciones: Conversaciones (50 filas) / Agentes
-- Click → descarga archivo .csv con datos filtrados
-- Abre en Excel → verifica encabezados y valores
-
----
-
-## 🧹 Limpiar seed después
-
-Cuando ya no necesites los datos de demo:
-
-```sql
--- Borrar los 50 conversations + sus mensajes
-DELETE FROM conversations WHERE metadata->>'seed' = 'true';
--- Los mensajes se borran en cascada (ON DELETE CASCADE en conversation_id)
+**⚠️ Si al clic en el widget no te lleva a esta ruta:** tu ChannelsView actual no está pasando al routing nuevo. En ese caso, navega manualmente a:
+```
+https://lora.jabenter.com/admin/channels/widget/033fd98f-be93-4bf5-b090-94e26f091d94
 ```
 
-Si el contacto demo también:
-```sql
-DELETE FROM contacts WHERE metadata->>'seed' = 'true';
+(usa uno de tus 3 channel IDs)
+
+### Test 2 — Tab Apariencia
+
+- Cambia color → selector o presets
+- Cambia posición → izquierda / derecha
+- Cambia nombre de marca → "Soporte Norson"
+- Pega URL de logo → opcional
+- Cambia mensaje de bienvenida
+- Click **"Guardar cambios"**
+- ✅ Toast verde "Configuración guardada"
+
+### Test 3 — Tab Pre-chat
+
+- Toggle "Pre-chat activo" a ON
+- Selecciona modo "Opcional"
+- Activa campo "Teléfono" con toggle "Mostrar"
+- Marca "Obligatorio" para email
+- Reordena con flechas ▲▼
+- Click "Guardar"
+
+### Test 4 — Tab Post-chat
+
+- Toggle "Post-chat activo" a ON
+- Activa "Permitir comentario"
+- Personaliza textos
+- Click "Guardar"
+
+### Test 5 — Tab Instalación
+
+- Copia el snippet con el botón
+- ✅ Toast "Copiado al portapapeles"
+- Léelo: debe tener tu channelId correcto
+
+### Test 6 — Widget en sitio externo (el test crítico)
+
+1. Ve a [CodePen.io](https://codepen.io/pen)
+2. En HTML pega el snippet que copiaste en Test 5
+3. En Settings → Behavior → desactiva Auto-Update
+4. Espera que el Pen recargue
+5. ✅ Ves el botón flotante 💬 con tu color custom
+6. Click al botón → aparece el pre-chat (si lo activaste)
+7. Completa el form → se abre el chat
+8. Envía un mensaje → bot IA responde
+9. Ve al admin `/admin/inbox` → ves la conversación con los datos del pre-chat
+
+### Test 7 — Post-chat funciona
+
+1. En el Inbox, marca la conversación como **Resuelta**
+2. **NOTA:** actualmente el widget NO sabe automáticamente que la conv se resolvió. Para probar el post-chat **manualmente**:
+   - Abre DevTools en el tab con el widget
+   - Consola: `window.LoraChatAPI.showPostChat()`
+3. ✅ Ves el modal de estrellas
+4. Selecciona 4 estrellas + comentario → click "Enviar"
+5. ✅ Ves "¡Gracias por tu tiempo!"
+6. Ve al admin/Analytics → esa conversación tiene CSAT 4
+
+**⚠️ Limitación conocida de Sprint 11:** el post-chat automático al resolver requiere un evento de realtime adicional que implementaremos en Sprint 11.5 si decidimos refinar. Por ahora se dispara manualmente con la API JS expuesta.
+
+### Test 8 — Help panel
+
+1. En `/admin/channels/widget/:id` click en **💡 Guía** arriba-derecha
+2. ✅ Se abre panel lateral con 6 secciones expandibles
+3. Expande "¿Cuándo activar el pre-chat?"
+4. Expande "Glosario"
+5. Cierra con ✕
+
+### Test 9 — Tooltips
+
+En Tab Apariencia o Pre-chat, hover sobre los iconitos `ℹ`:
+- ✅ Aparece tooltip oscuro con explicación breve
+
+### Test 10 — Dirty state
+
+1. Cambia un valor
+2. Verás badge ámbar flotante "⚠️ Tienes cambios sin guardar"
+3. Intenta navegar fuera → browser pregunta "¿Salir sin guardar?"
+4. Click "Descartar" → todo vuelve al original
+
+---
+
+## 🎨 Lo que va a ver tu cliente (flujo completo)
+
 ```
-
----
-
-## 📊 Fórmulas de métricas
-
-| Métrica | Fórmula |
-|---|---|
-| **FRT** | `first_response_at - handoff_at` |
-| **Resolution time** | `resolved_at - created_at` |
-| **Handoff rate** | `conversaciones con agent_id / total × 100` |
-| **Resolution rate** | `resolved / total × 100` |
-| **CSAT promedio** | `AVG(csat_score) WHERE NOT NULL` |
-| **Radar score compuesto** | `resolved + csat × 5 - frt_min` |
-
----
-
-## 🎨 Diseño visual
-
-- **Colores:** paleta consistente (brand-blue, emerald, amber, red)
-- **Layout:** grid responsive (desktop 3-col, mobile stacked)
-- **Charts:** SVG puro, cero librerías externas (todo custom)
-- **Estados vacíos:** mensajes amigables cuando no hay data
+1. Cliente abre tu sitio
+   ↓
+2. Ve botón flotante "💬" (con tu color)
+   ↓
+3. Click → aparece ventana del chat
+   ↓ (si pre-chat está activo)
+4. Form: "Antes de empezar"
+   [ Nombre       ]
+   [ Email        ]
+   [ Teléfono     ]  (si activaste)
+   [ Motivo ▼     ]  (si activaste)
+   [ Iniciar conversación ]
+   ↓
+5. Chat normal con tu bot IA
+   ↓
+6. Bot responde o pasa a agente humano
+   ↓
+7. Al cerrar la conversación (si post-chat activo):
+   "¿Cómo fue tu atención?"
+   ★ ★ ★ ★ ★
+   [comentario opcional]
+   [Enviar]
+   ↓
+8. "¡Gracias por tu tiempo!" → se cierra
+```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### "relation v_conversations_analytics does not exist"
-El SQL no se aplicó. Re-corre `2026_sprint_10.sql`.
+### "No se puede cargar config" en widget
 
-### Dashboard vacío aunque corriste el seed
+La Edge Function `widget-config` no está deployada o no es pública.
 Verifica:
-```sql
-SELECT COUNT(*), status FROM conversations 
-WHERE metadata->>'seed' = 'true' 
-GROUP BY status;
+```bash
+curl https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/widget-config?channel_id=TU_ID
 ```
-Debe devolver 4 filas (open/pending/resolved/abandoned).
+Debe devolver JSON con el settings. Si da 401, la función no tiene `--no-verify-jwt`.
 
-### "Sin actividad de agentes en este período"
-Los seed usan agentes existentes. Si solo tienes 1 agente, aparecerá solo ese.
+### Widget aparece pero sin estilos custom
 
-### Build falla con TS errors
-Lo más probable: falta importar `SupervisorAlerts` o tipos viejos. Pégame el error.
+El `settings` está vacío. Verifica con SQL:
+```sql
+SELECT id, name, jsonb_pretty(settings) FROM channels WHERE type = 'web_widget';
+```
 
-### El selector de Equipo no aparece
-Es esperado si no tienes tabla `teams` en la DB. El repo maneja ese caso con warning silencioso.
+Si algún widget tiene `{}`, re-corre el SQL de migración — el UPDATE solo afecta widgets con settings vacío.
 
-### CSV no descarga en Safari
-Tiene un bug conocido. Funciona en Chrome/Firefox/Edge sin problema.
+### CSAT no se guarda
+
+Probablemente `widget-csat` no está deployada. Verifica con:
+```bash
+curl -X POST https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/widget-csat \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_id":"test","rating":5}'
+```
+
+### Widget se ve en mobile mal
+
+Los anchos del widget son fijos en 380px. Si quieres 100% responsive para pantallas &lt;400px, puedes editar `public/widget.js` línea del `#lora-chat-window`:
+```css
+width: 380px;
+max-width: calc(100vw - 40px);
+```
 
 ---
 
-## 🔐 Permisos RBAC
+## 💡 Decisiones de diseño importantes
 
-| Rol | analytics.read | analytics.export |
-|---|---|---|
-| agent | ❌ | ❌ |
-| supervisor | ✅ team | ✅ team |
-| admin | ✅ all | ✅ all |
-| super_admin | ✅ all | ✅ all |
+1. **Settings como JSONB único** (en lugar de columnas): máxima flexibilidad para agregar features sin migraciones.
+2. **Edge Functions públicas para widget**: no exponen la service role key. El helper RPC `get_widget_public_config` remueve cualquier campo sensible.
+3. **Widget carga config en runtime**: cambios en el admin se reflejan **instantáneamente** (hasta 5 min de cache HTTP) sin reinstalar snippet.
+4. **Merge defensivo de settings**: `mergeWidgetSettings()` garantiza que si añadimos un campo nuevo en el futuro (ej: `branding.font_family`), los widgets viejos siguen funcionando.
+5. **Validación en cliente Y servidor**: el form valida required antes de enviar, pero el RPC también rechazaría data mala.
 
-Si un agent común intenta ir a `/admin/analytics`, lo redirige a dashboard.
+---
+
+## 📊 Impacto en el sistema
+
+- ✅ Widgets existentes siguen funcionando (el snippet viejo sin pre-chat es compatible)
+- ✅ Nuevos widgets tienen pre-chat/post-chat deshabilitados por default (no-op)
+- ✅ Analytics empieza a recibir `csat_score` real cuando activen post-chat
+- ✅ Contacts con nombre/email/teléfono real cuando activen pre-chat
 
 ---
 
@@ -235,59 +287,53 @@ Si un agent común intenta ir a `/admin/analytics`, lo redirige a dashboard.
 ```bash
 cd C:\xampp\htdocs\proyectos\chatbot
 git add -A
-git commit -m "feat(sprint-10): Agent Analytics dashboard completo
+git commit -m "feat(sprint-11): Widget update + Pre-chat + Post-chat + Help system
 
 SQL:
-- Vista v_conversations_analytics (base para queries)
-- Vista v_agent_metrics (agregados por agente)
-- RPC get_heatmap_data (día × hora)
-- 2 permisos: analytics.read / analytics.export
-- Seed de 50 conversaciones fake para demo
+- Default settings para widgets existentes (backward compatible)
+- Helper RPC get_widget_public_config (expone settings sin secretos)
+- Permiso channels.configure
 
-Frontend:
-- Vista /admin/analytics con 4 tabs
-- DateRangePicker con 10 presets + custom
-- 6 filtros: fecha, agente, canal, estado, prioridad, equipo
-- 7 gráficos SVG puros (sin libs):
-  * Línea volumen con comparativo período anterior
-  * Dona 4 estados
-  * Barras horizontales top 5 agentes
-  * Radar pentágono por agente
-  * Heatmap 7×24 horas
-  * Bubble FRT vs volumen
-  * Leaderboard preview
-- Tab Leaderboard con 🥇🥈🥉
-- Tab Horarios fullsize
-- Tab Comparativo período vs anterior
-- Export CSV (conversaciones + agentes)
+Edge Functions:
+- widget-config (pública, no-verify-jwt): sirve settings al widget
+- widget-csat (pública): recibe rating del post-chat
 
-Agent Workspace completo: cuadrantes A, B, C y D implementados."
+Frontend Admin:
+- Vista /admin/channels/widget/:id con 4 tabs
+- Tab Apariencia: color, posicion, logo, mensajes
+- Tab Pre-chat: toggle + modo + campos configurables (visibilidad,
+  obligatorio, orden, labels)
+- Tab Post-chat: CSAT con estrellas y comentario opcional
+- Tab Instalación: snippet copy-paste con preview
+- Dirty state con warning antes de navegar
+- Help panel lateral con 6 secciones didacticas
+- Tooltips premium en cada elemento
+
+Widget:
+- Carga config dinamica de edge function
+- Pre-chat form con validacion cliente
+- Post-chat con CSAT estrellas + comentario
+- Realtime bidireccional mantenido
+- API expuesta: window.LoraChatAPI.showPostChat() para testing
+
+Help system (Opción C):
+- Tooltips contextuales (hovers)
+- Panel lateral con 6 secciones expandibles
+- Contenido premium didactico (cuando activar, tips de conversion,
+  glosario)"
 
 git push
 ```
 
 ---
 
-## ✅ Agent Workspace COMPLETO
+## 🎯 Siguiente sprint
 
-```
-[✅] Cuadrante A (Gestión)       · Sprint 7.5 + 8
-[✅] Cuadrante B (Mi workspace)  · Sprint 8
-[✅] Cuadrante C (Supervisor)    · Sprint 9
-[✅] Cuadrante D (Analytics)     · Sprint 10 ← ESTE
-```
+Con Sprint 11 en producción, el roadmap sigue con:
 
----
-
-## 🚀 ¿Qué sigue?
-
-Con el Agent Workspace terminado, las opciones son:
-
-1. **Pre-chat widget** (Entrega 2.5 pendiente de Sprint 7.5)
-2. **Sprint 11: Settings avanzado** (branding, notificaciones, integraciones)
-3. **Sprint 12: Email invitaciones** (flujo completo con templates)
-4. **Sprint 13: Telegram** (2do canal)
-5. **Sprint 14: Landing comercial** (lorachat.net)
-6. **Sprint 15: Stripe billing** (monetización)
-7. **Sprint 16: Constructor visual de flujos**
-8. **Sprint 17: WhatsApp Business API**
+- **Sprint 12:** Help System framework completo + docs retroactivas de Sprints 7-10
+- **Sprint 13:** Landing comercial lorachat.net
+- **Sprint 14:** Telegram como 2do canal
+- **Sprint 15:** Stripe billing
+- **Sprint 16:** WhatsApp Business API
+- **Sprint 17:** Constructor visual de flujos
