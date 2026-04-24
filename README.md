@@ -1,314 +1,257 @@
-# Sprint 5 — Multi-tenant con subdominios
+# 🚀 Sprint 6 + 7 — Modo soporte + Editor de branding
 
-Arquitectura completa para que LORA soporte múltiples empresas con sus propios subdominios: `jab.lorachat.net`, `norson.lorachat.net`, `capitali.lorachat.net`, etc.
+Este paquete agrega 2 funcionalidades a LORA:
 
-Incluye también el **wizard del super admin** para crear empresas nuevas sin tocar SQL.
+- **Sprint 6:** Modo soporte super_admin (banner + logs + confirmaciones)
+- **Sprint 7:** Editor de branding per-tenant (color, logo, mensajes del widget)
 
 ---
 
-## 📦 Archivos incluidos (13)
+## 📋 Resumen de cambios
+
+| Tipo | Archivo | Sprint |
+|---|---|---|
+| 🆕 SQL | `supabase/migrations/20260423_sprint6_7_storage_support.sql` | 6+7 |
+| 🆕 Composable | `src/composables/useSupportMode.ts` | 6 |
+| 🆕 Composable | `src/composables/useLogoUpload.ts` | 7 |
+| 🆕 Componente | `src/components/SupportModeBanner.vue` | 6 |
+| 🔧 Modificado | `src/layouts/AdminLayout.vue` | 6 |
+| 🆕 Componente | `src/modules/settings/components/LogoUploader.vue` | 7 |
+| 🆕 Vista | `src/modules/settings/views/BrandingView.vue` | 7 |
+| 🔧 Modificado | `src/router/index.ts` (agrega ruta /admin/branding) | 7 |
+
+---
+
+## 🔧 Instalación paso a paso
+
+### Paso 1: Aplicar migración SQL
+
+1. Abre Supabase Dashboard → SQL Editor
+2. Copia el contenido de `supabase/migrations/20260423_sprint6_7_storage_support.sql`
+3. Ejecuta
+4. Al final verás la verificación:
+   ```
+   status='Sprint 6+7 migración aplicada'
+   buckets_creados=1
+   policies_storage=4
+   funciones=1
+   ```
+
+### Paso 2: Copiar archivos al proyecto
+
+Todos los archivos de este ZIP tienen su **ruta completa desde `/src`**.
+Copia cada archivo a su destino respectivo en tu proyecto:
 
 ```
-lora-sprint5/
-├── README.md                                                          ← este archivo
-│
-├── supabase/
-│   └── migrations/
-│       └── 20260423_sprint5_functions.sql                             ← RPC atómico + RLS super_admin
-│
-└── src/
-    ├── types/
-    │   └── organization.types.ts                                      ← NUEVO · tipos TS
-    │
-    ├── stores/
-    │   └── organization.store.ts                                      ← NUEVO · Pinia store
-    │
-    ├── composables/
-    │   └── useOrganizationContext.ts                                  ← NUEVO · detector de subdomain
-    │
-    ├── router/
-    │   ├── guards.ts                                                  ← REEMPLAZO · +orgContextGuard, +superAdminGuard
-    │   └── index.ts                                                   ← REEMPLAZO · +ruta super-admin
-    │
-    ├── repository/supabase/
-    │   └── organizations.repo.ts                                      ← NUEVO · CRUD de orgs
-    │
-    ├── layouts/
-    │   └── AdminLayout.vue                                            ← REEMPLAZO · sección LORA Admin + branding dinámico
-    │
-    └── modules/super-admin/
-        ├── views/
-        │   └── OrganizationsView.vue                                  ← NUEVO · lista + acciones
-        └── components/
-            ├── CreateOrganizationWizard.vue                           ← NUEVO · wizard 4 pasos
-            ├── OrganizationCard.vue                                   ← NUEVO · card individual
-            ├── SubdomainInput.vue                                     ← NUEVO · input con validación
-            └── WidgetPreview.vue                                      ← NUEVO · preview en vivo
+sprint-6-7/src/composables/useSupportMode.ts
+  → C:\xampp\htdocs\proyectos\chatbot\src\composables\useSupportMode.ts
+
+sprint-6-7/src/composables/useLogoUpload.ts
+  → C:\xampp\htdocs\proyectos\chatbot\src\composables\useLogoUpload.ts
+
+sprint-6-7/src/components/SupportModeBanner.vue
+  → C:\xampp\htdocs\proyectos\chatbot\src\components\SupportModeBanner.vue
+
+sprint-6-7/src/layouts/AdminLayout.vue
+  → (REEMPLAZAR) C:\xampp\htdocs\proyectos\chatbot\src\layouts\AdminLayout.vue
+
+sprint-6-7/src/modules/settings/components/LogoUploader.vue
+  → C:\xampp\htdocs\proyectos\chatbot\src\modules\settings\components\LogoUploader.vue
+
+sprint-6-7/src/modules/settings/views/BrandingView.vue
+  → C:\xampp\htdocs\proyectos\chatbot\src\modules\settings\views\BrandingView.vue
+
+sprint-6-7/src/router/index.ts
+  → (VER NOTA ABAJO) C:\xampp\htdocs\proyectos\chatbot\src\router\index.ts
 ```
 
----
+#### ⚠️ Nota sobre router/index.ts
 
-## 🎯 Qué hace este Sprint
+El archivo `src/router/index.ts` es una REFERENCIA. Tu proyecto puede tener
+más rutas que no quiero pisar. Agrega manualmente estas líneas en tu router:
 
-### 1. Detección automática de subdomain
-Cuando alguien entra a `jab.lorachat.net`:
-1. El composable `useOrganizationContext()` detecta `subdomain = "jab"`
-2. El store `organization.store.ts` llama al RPC `get_org_by_subdomain('jab')`
-3. Si existe → carga los datos de Jab, aplica su color primario al CSS
-4. Si no existe → redirige a login con error
+**1. En los imports (arriba del archivo):**
+```ts
+const BrandingView = () => import('@/modules/settings/views/BrandingView.vue')
+```
 
-### 2. Login contextualizado
-- Super admin entra a cualquier subdomain → **OK**
-- Admin de Jab entra a `jab.lorachat.net` → **OK**
-- Admin de Jab entra a `norson.lorachat.net` → **Acceso denegado** (usuario de otra org)
+**2. En las children de `/admin` (dentro del AdminLayout):**
+```ts
+{
+  path: 'branding',
+  name: 'admin.branding',
+  component: BrandingView,
+  meta: {
+    requiresAuth: true,
+    title: 'Branding',
+    permission: 'settings.update'
+  }
+},
+```
 
-### 3. Branding dinámico
-Cuando estás en `jab.lorachat.net`:
-- Sidebar del admin muestra **"Jab Enterprises"** en vez de "LORA"
-- Color primario del CSS cambia al de Jab
-- Título de la pestaña: "LORA · Jab Enterprises"
+Ponla antes de `{ path: 'users', ... }` para mantener el orden.
 
-### 4. Wizard del super admin
-Tú (`role = 'super_admin'`) ves una nueva sección **"LORA Admin"** en el sidebar:
-- Click en "Organizaciones" → lista completa de empresas
-- Botón "+ Nueva empresa" → wizard de 4 pasos
-- Al crear: genera org + canal widget + rol admin + invitación en una transacción
-- Resultado: te muestra el link de invitación con botones "Copiar" y "Compartir por WhatsApp"
-
----
-
-## 🚀 Orden de instalación (5 pasos)
-
-### Paso 1 — Backup (importante)
+### Paso 3: Probar localmente
 
 ```powershell
-cd C:\xampp\htdocs\proyectos\chatbot
-
-# Branch de seguridad
-git checkout -b feat/sprint-5-multitenant
-git add -A
-git commit -m "pre-sprint-5 snapshot"
+npm run dev
 ```
 
-### Paso 2 — Correr migración SQL
+#### Test 1 — Modo soporte (Sprint 6)
+1. Login como super_admin (nestorvaldez@hotmail.com)
+2. Cambia `.env.local` a `VITE_DEV_SUBDOMAIN=capitali`
+3. Reinicia `npm run dev`
+4. Recarga localhost
+5. **Deberías ver banner naranja arriba:** "Modo soporte activo"
+6. Botón "← Volver a mi panel" te lleva a admin
 
-1. Abre: https://supabase.com/dashboard/project/imvahmyywbtcfsduwbdq/sql/new
-2. Copia todo el contenido de `supabase/migrations/20260423_sprint5_functions.sql`
-3. Pégalo en el editor
-4. Click en **Run**
+#### Test 2 — Login normal NO muestra banner
+1. Logout
+2. Cambia `.env.local` a `VITE_DEV_SUBDOMAIN=` (vacío)
+3. Login como super_admin
+4. **NO debe aparecer banner** (estás en tu propio panel)
 
-**Resultado esperado:** la última query devuelve `count = 4` (las 4 funciones nuevas creadas).
+#### Test 3 — Editor de branding (Sprint 7)
+1. Login como admin de una empresa (capitalird@gmail.com)
+2. Ve al menú lateral → **"Branding"** (ícono 🎨)
+3. Prueba cada funcionalidad:
+   - Subir un logo (drag & drop)
+   - Cambiar el color primario
+   - Editar el título de bienvenida
+4. Click en **"Guardar cambios"**
+5. Recarga la página → los cambios persisten ✓
+6. El sidebar ahora muestra el logo (si subiste uno)
 
-### Paso 3 — Copiar los archivos Vue/TS
-
-Descomprime el ZIP y copia los archivos a sus rutas (todos en `src/`):
-
-| Archivo del ZIP | Destino |
-|---|---|
-| `src/types/organization.types.ts` | Crea nuevo |
-| `src/stores/organization.store.ts` | Crea nuevo |
-| `src/composables/useOrganizationContext.ts` | Crea nuevo |
-| `src/repository/supabase/organizations.repo.ts` | Crea nuevo |
-| `src/router/guards.ts` | **REEMPLAZA el existente** |
-| `src/router/index.ts` | **REEMPLAZA el existente** |
-| `src/layouts/AdminLayout.vue` | **REEMPLAZA el existente** |
-| `src/modules/super-admin/views/OrganizationsView.vue` | Crea nuevo |
-| `src/modules/super-admin/components/CreateOrganizationWizard.vue` | Crea nuevo |
-| `src/modules/super-admin/components/OrganizationCard.vue` | Crea nuevo |
-| `src/modules/super-admin/components/SubdomainInput.vue` | Crea nuevo |
-| `src/modules/super-admin/components/WidgetPreview.vue` | Crea nuevo |
-
-### Paso 4 — Verificar compilación
-
-```powershell
-cd C:\xampp\htdocs\proyectos\chatbot
-
-# Check de TypeScript
-npm run typecheck
-```
-
-Debería terminar sin errores.
-
-Si hay errores de TypeScript, me los pegas y los resolvemos.
-
-### Paso 5 — Build y deploy
+### Paso 4: Build de producción
 
 ```powershell
 npm run build
 ```
 
-Sube `/dist` al FTP de `admin.lorachat.net` sobrescribiendo lo existente.
+Si sale algún error de TypeScript, pégamelo y lo arreglo.
+
+### Paso 5: Deploy via FTP
+
+1. Sube `dist/` a `/public_html/admin.lorachat.net/`
+2. Prueba en incógnita:
+   - `admin.lorachat.net` como super_admin → sin banner
+   - `capitali.lorachat.net` como super_admin → CON banner
+   - `capitali.lorachat.net` como capitalird → ver menú Branding
 
 ---
 
-## ✅ Validación post-deploy
+## 🎯 Lo que logras con este paquete
 
-### Check 1: Super admin UI visible
+### Sprint 6 — Modo soporte
 
-1. Abre `https://admin.lorachat.net` en incógnito
-2. Login con tu cuenta super_admin
-3. En el sidebar, al final, deberías ver una sección **"LORA Admin"** con el ícono 🏢 **"Organizaciones"**
-4. Si no la ves → tu usuario no tiene `role = 'super_admin'` en la tabla `users`
+✅ Banner naranja visible cuando super_admin entra a tenant ajeno
+✅ Botón rápido "Volver a mi panel"
+✅ Logs de auditoría con prefix `support_mode.*`
+✅ Función SQL para registrar acciones (disponible para otros módulos)
 
-**Para verificar tu rol:**
+### Sprint 7 — Editor de branding
+
+✅ Upload de logo con drag & drop (PNG/JPG/WEBP/SVG, máx 2MB)
+✅ Color picker con preview en vivo
+✅ Editor de mensajes del widget (bienvenida, offline)
+✅ Preview del widget al lado (igual al del wizard)
+✅ Permisos: solo admins con `settings.update`
+✅ Super_admin puede editar branding de cualquier empresa (modo soporte)
+
+---
+
+## 🗂️ Storage en Supabase
+
+Después de aplicar la migración, verás en Supabase → Storage:
+
+```
+📁 organization-logos (bucket público)
+   📁 {org_id_1}/
+      └── logo-1234567890.png
+   📁 {org_id_2}/
+      └── logo-9876543210.jpg
+```
+
+Las policies aseguran que:
+- Cualquiera puede **leer** (necesario para el widget público)
+- Solo admins de la org pueden **subir/borrar** en su carpeta
+- Super_admin puede gestionar cualquier carpeta
+
+---
+
+## 🧪 Comandos útiles para debugging
+
+### Ver logs de super_admin en BD
 ```sql
-SELECT id, email, role FROM users WHERE id = auth.uid();
+SELECT
+  created_at,
+  action,
+  u.email AS super_admin,
+  o.name AS target_org,
+  changes
+FROM audit_logs al
+JOIN users u ON u.id = al.user_id
+JOIN organizations o ON o.id = al.organization_id
+WHERE action LIKE 'support_mode.%'
+ORDER BY created_at DESC
+LIMIT 10;
 ```
 
-Si `role != 'super_admin'`:
+### Ver logos subidos
 ```sql
-UPDATE users SET role = 'super_admin' WHERE id = 'f8c1ecb6-2230-448b-9508-140e97d5ba5e';
+SELECT
+  name,
+  created_at,
+  ROUND((metadata->>'size')::numeric / 1024, 1) AS kb
+FROM storage.objects
+WHERE bucket_id = 'organization-logos'
+ORDER BY created_at DESC;
 ```
 
-### Check 2: Lista de organizaciones
-
-Click en "Organizaciones". Deberías ver:
-- **Jab Enterprises** (subdomain: jab) — activa
-- **Norson Group** (subdomain: norson) — activa
-
-Con sus métricas de usuarios y conversaciones.
-
-### Check 3: Crear Capitali con el wizard
-
-Click en **+ Nueva empresa** y sigue los 4 pasos:
-
-```
-Paso 1: Nombre = "Capitali" · Email = (opcional, ej: admin@capitali.com)
-Paso 2: Subdomain = "capitali" (debe mostrar ✓ Disponible)
-Paso 3: Color = #10B981 (verde) · Mensaje bienvenida = "Hola! En qué te puedo ayudar?"
-Paso 4: Click en "✨ Crear empresa"
-```
-
-Al final deberías ver:
-- ✅ Modal verde "¡Empresa creada! 🎉"
-- URL: `https://capitali.lorachat.net`
-- Link de invitación copiable
-- Botón "📱 WhatsApp" para compartir
-
-### Check 4: Acceder al subdomain nuevo
-
-Abre en incógnito: `https://capitali.lorachat.net`
-
-Deberías ver:
-- Login de LORA
-- Al entrar con tu cuenta super_admin: sidebar muestra **"Capitali"** con el color verde
-- El título de la pestaña dice "LORA · Capitali"
-
-### Check 5: Aislamiento de datos (RLS)
-
-Desde `https://capitali.lorachat.net`:
-- Vas a Inbox → debe estar **vacío** (Capitali no tiene conversaciones aún)
-- Vas a Canales → hay un canal "Widget Web" pre-creado
-
-Desde `https://jab.lorachat.net`:
-- Vas a Inbox → ves **las conversaciones de Jab**
-
-Confirma que los datos no se cruzan.
-
----
-
-## 🐛 Problemas comunes y soluciones
-
-### Problema 1: "La empresa 'capitali' no existe o está desactivada"
-
-**Causa:** el wildcard DNS no está propagando para ese subdomain, o la org no está en DB.
-
-**Solución:**
-```powershell
-# Verifica DNS
-nslookup capitali.lorachat.net
-
-# Si no existe, espera 5-10 minutos y vuelve a probar
-```
-
+### Limpiar logos huérfanos
 ```sql
--- Verifica la org en DB
-SELECT id, name, subdomain, active FROM organizations WHERE subdomain = 'capitali';
+-- (opcional, si hay logos de empresas que ya se borraron)
+DELETE FROM storage.objects
+WHERE bucket_id = 'organization-logos'
+  AND (storage.foldername(name))[1] NOT IN (
+    SELECT id::text FROM organizations
+  );
 ```
-
-### Problema 2: Error "Solo super_admin puede crear organizaciones"
-
-**Causa:** tu usuario no tiene `role = 'super_admin'` en la tabla `users`.
-
-**Solución:**
-```sql
-UPDATE users SET role = 'super_admin' WHERE id = 'TU_USER_ID';
-```
-
-### Problema 3: "No hay tablas bot_personas" (warning opcional)
-
-La función intenta crear una bot_persona default. Si esa tabla no existe, se salta esa parte. Es esperado.
-
-Si quieres crear una persona default para orgs nuevas en el futuro, verifica que la tabla exista o ajusta la función.
-
-### Problema 4: El branding del tenant no se aplica
-
-**Causa:** El store no carga la org antes de renderizar el layout.
-
-**Solución:** Verifica que `orgStore.applyBrandingToDOM()` se llame en `onMounted` del AdminLayout. Si el problema persiste, revisa que el RPC `get_org_by_subdomain` sea accesible por `anon` (la migración lo configura).
-
-### Problema 5: TypeScript se queja del import de `useDocumentTitle`
-
-Si no tienes ese composable (lo creamos en Sprint 7), reemplaza la línea:
-```typescript
-import { useDocumentTitle } from '@/composables/useDocumentTitle'
-```
-Y la llamada `useDocumentTitle()` con un comentario o elimínalas. Son opcionales.
 
 ---
 
-## 🎨 Personalización
+## ❓ Troubleshooting
 
-### Cambiar el dominio base
+### "New row violates row-level security policy"
+La policy de upload falló. Verifica:
+- Estás logueado
+- Tu user tiene `role='admin'` o `role='super_admin'`
+- El path del archivo empieza con tu `organization_id`
 
-Si algún día migras el dominio, edita `src/composables/useOrganizationContext.ts`:
+### El banner de modo soporte no aparece
+Verifica:
+- Eres super_admin (`users.role = 'super_admin'`)
+- Tu `organizationId` ≠ `orgStore.current.id`
+- Estás en un subdomain (no localhost sin VITE_DEV_SUBDOMAIN)
 
-```typescript
-const BASE_DOMAIN = 'lorachat.net'  // ← cambiar aquí
-```
-
-### Agregar subdominios reservados
-
-```sql
-INSERT INTO reserved_subdomains (subdomain, reason)
-VALUES ('nuevo', 'Mi razón');
-```
-
-### Desarrollo local con subdomain simulado
-
-En `.env.local`:
-```
-VITE_DEV_SUBDOMAIN=jab
-```
-
-Reinicia `npm run dev` y la app se comportará como si estuvieras en `jab.lorachat.net`. Útil para probar el flujo tenant sin DNS real.
+### El logo no aparece en el sidebar después de subirlo
+Recarga la página. El `orgStore.current.logoUrl` se actualiza al momento,
+pero si estabas en otra pestaña puede tener cache del estado anterior.
 
 ---
 
-## 📊 Qué NO incluye este Sprint (decisiones futuras)
+## 🎯 Próximos sprints sugeridos
 
-Intencional para no inflar este sprint:
+Después de deployar este paquete, los siguientes pasos recomendados son:
 
-- ❌ **Envío automático de email de invitación** — por ahora copias el link manualmente
-- ❌ **Editar organizaciones existentes** (nombre/color/subdomain) — solo crear/activar/desactivar
-- ❌ **Borrado permanente de organizaciones** — solo soft delete (active=false)
-- ❌ **Subir logos** — URL manual por ahora, upload en Sprint futuro
-- ❌ **Gestión de planes/billing** — el campo `plan` existe pero no hace nada
-- ❌ **Transferencia de datos entre orgs** — no está implementado
-- ❌ **Auto-servicio (clientes creando su propia org)** — solo super_admin crea orgs
+**Sprint 8 — Email automático de invitaciones (2h)**
+Para que las empresas nuevas reciban el link por email automáticamente
+en lugar del copy-paste manual del wizard.
 
----
+**Sprint 9 — Telegram como 2do canal (2-3h)**
+Primer canal adicional al widget web. Amplía el mercado de clientes.
 
-## 🗺️ Próximos sprints sugeridos
+**Sprint 11 — Facturación Stripe (6h)**
+Monetización: 3 planes (Starter / Pro / Business) con gates por features.
 
-Una vez este funcione:
-
-1. **Editor de branding por tenant** — para que cada admin pueda editar su propio color/logo
-2. **Email automático de invitación** — setup Resend o Brevo
-3. **Landing page de "sign up"** — auto-servicio para que nuevos clientes se registren
-4. **Billing con Stripe** — cobrar planes
-5. **Telegram como canal adicional** — que faltó del backlog
-
----
-
-**© 2026 Jab Enterprises · LORA Chat Sprint 5**
+¡Listo para seguir después del deploy! 🚀

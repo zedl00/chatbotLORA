@@ -4,6 +4,9 @@
 //   - Nueva sección de rutas /super-admin/* con superAdminGuard
 //   - Nueva vista: /super-admin/organizations
 //   - Guard orgContextGuard agregado a la cadena
+//
+// MODIFICADO en Sprint 7 (Editor de branding):
+//   - Nueva ruta /admin/branding (editor per-tenant de color, logo, mensajes)
 // ═══════════════════════════════════════════════════════════════
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import {
@@ -46,6 +49,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'agents',      name: 'admin.agents',      component: () => import('@/modules/agents/views/AgentsView.vue'),        meta: { permission: 'agents.read', title: 'Equipo' } },
       { path: 'reports',     name: 'admin.reports',     component: () => import('@/modules/reports/views/ReportsView.vue'),      meta: { permission: 'reports.view', title: 'Reportes' } },
 
+      // 🆕 Sprint 7: Editor de branding per-tenant (color, logo, mensajes del widget)
+      { path: 'branding',    name: 'admin.branding',    component: () => import('@/modules/settings/views/BrandingView.vue'),    meta: { permission: 'settings.update', title: 'Branding' } },
+
       // IA
       { path: 'ai-personas', name: 'admin.ai-personas', component: () => import('@/modules/ai/views/AiPersonasView.vue'),        meta: { permission: 'ai.configure', title: 'Personalidades IA' } },
       { path: 'playground',  name: 'admin.playground',  component: () => import('@/modules/playground/views/PlaygroundView.vue'),meta: { permission: 'ai.configure', title: 'Playground' } },
@@ -59,7 +65,7 @@ const routes: RouteRecordRaw[] = [
     ]
   },
 
-  // 🆕 SUPER ADMIN — solo accesible para role 'super_admin'
+  // SUPER ADMIN — solo accesible para role 'super_admin'
   {
     path: '/super-admin',
     component: () => import('@/layouts/AdminLayout.vue'),

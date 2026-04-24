@@ -2,12 +2,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import { playgroundSend } from '@/services/claude.service'
 import type { BotPersona } from '@/types/ai.types'
 import { initials } from '@/utils/format'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseAiRepo()
 
 interface ChatBubble {
@@ -43,8 +45,8 @@ const totalTokens = computed(() => {
 })
 
 async function load() {
-  if (!auth.organizationId) return
-  personas.value = (await repo.listPersonas(auth.organizationId)).filter((p) => p.active)
+  if (!activeOrgId.value) return
+  personas.value = (await repo.listPersonas(activeOrgId.value)).filter((p) => p.active)
   const def = personas.value.find((p) => p.isDefault)
   if (def) selectedPersonaId.value = def.id
   else if (personas.value.length > 0) selectedPersonaId.value = personas.value[0].id

@@ -1,4 +1,11 @@
 // Ruta: /src/repository/supabase/user.repo.ts
+// ═══════════════════════════════════════════════════════════════
+// MODIFICADO en Sprint 6.8:
+//   - Fix error PGRST201: "Could not embed because more than one
+//     relationship was found for 'users' and 'user_roles'"
+//   - Causa: user_roles tiene 2 FKs hacia users (user_id + granted_by)
+//   - Fix: especificar la FK explícitamente con el nombre del constraint
+// ═══════════════════════════════════════════════════════════════
 import { supabase } from '@/services/supabase.client'
 import type { User, UserRole as LegacyRole } from '@/types/user.types'
 import type { Role } from '@/types/rbac.types'
@@ -19,11 +26,15 @@ export interface UserWithRoles extends User {
 
 export class SupabaseUserRepo {
   async listUsers(organizationId: string): Promise<UserWithRoles[]> {
+    // 🆕 Sprint 6.8 — FIX PGRST201
+    // Antes: user_roles(role:roles(*)) → ambigüedad (FKs user_id y granted_by)
+    // Ahora: user_roles!user_roles_user_id_fkey(role:roles(*))
+    //        → especifica que queremos los roles DEL usuario (no los asignados por él)
     const { data, error } = await supabase
       .from('users')
       .select(`
         *,
-        user_roles(
+        user_roles!user_roles_user_id_fkey(
           role:roles(*)
         )
       `)
@@ -33,21 +44,23 @@ export class SupabaseUserRepo {
 
     return (data ?? []).map((r: any) => ({
       ...toUser(r),
-      roles: (r.user_roles ?? []).map((ur: any) => ({
-        id: ur.role.id,
-        organizationId: ur.role.organization_id,
-        key: ur.role.key,
-        name: ur.role.name,
-        description: ur.role.description,
-        color: ur.role.color,
-        icon: ur.role.icon,
-        isSystem: ur.role.is_system,
-        priority: ur.role.priority,
-        active: ur.role.active,
-        createdBy: ur.role.created_by,
-        createdAt: ur.role.created_at,
-        updatedAt: ur.role.updated_at
-      }))
+      roles: (r.user_roles ?? [])
+        .filter((ur: any) => ur.role !== null)
+        .map((ur: any) => ({
+          id: ur.role.id,
+          organizationId: ur.role.organization_id,
+          key: ur.role.key,
+          name: ur.role.name,
+          description: ur.role.description,
+          color: ur.role.color,
+          icon: ur.role.icon,
+          isSystem: ur.role.is_system,
+          priority: ur.role.priority,
+          active: ur.role.active,
+          createdBy: ur.role.created_by,
+          createdAt: ur.role.created_at,
+          updatedAt: ur.role.updated_at
+        }))
     }))
   }
 

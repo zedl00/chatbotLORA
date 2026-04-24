@@ -2,12 +2,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import { embedKnowledgeDoc } from '@/services/claude.service'
 import type { KnowledgeDoc } from '@/types/ai.types'
 import { formatDateShort } from '@/utils/format'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseAiRepo()
 
 const docs = ref<KnowledgeDoc[]>([])
@@ -23,10 +25,10 @@ const form = ref({
 })
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
-    docs.value = await repo.listKnowledgeDocs(auth.organizationId)
+    docs.value = await repo.listKnowledgeDocs(activeOrgId.value)
   } finally {
     loading.value = false
   }
@@ -45,7 +47,7 @@ function startEdit(doc: KnowledgeDoc) {
 }
 
 async function handleSave() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   try {
     let docId: string
     if (editing.value) {
@@ -53,7 +55,7 @@ async function handleSave() {
       docId = updated.id
     } else {
       const created = await repo.createKnowledgeDoc({
-        organizationId: auth.organizationId,
+        organizationId: activeOrgId.value,
         ...form.value
       })
       docId = created.id

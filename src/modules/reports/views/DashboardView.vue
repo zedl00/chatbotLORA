@@ -2,11 +2,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { useCan } from '@/composables/useCan'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import type { AiMonthlyUsage } from '@/types/ai.types'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const { can } = useCan()
 const repo = new SupabaseAiRepo()
 
@@ -15,10 +17,10 @@ const tokenLimit = ref<number | null>(null)
 const loading = ref(false)
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
-    usage.value = await repo.getMonthlyUsage(auth.organizationId)
+    usage.value = await repo.getMonthlyUsage(activeOrgId.value)
   } finally {
     loading.value = false
   }

@@ -2,11 +2,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseRbacRepo } from '@/repository/supabase/rbac.repo'
 import type { PermissionAuditEntry } from '@/types/rbac.types'
 import { formatDateFull, timeAgo } from '@/utils/format'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseRbacRepo()
 
 const entries = ref<PermissionAuditEntry[]>([])
@@ -29,11 +31,11 @@ const actionOptions = [
 ]
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
     const result = await repo.listAuditLog({
-      organizationId: auth.organizationId,
+      organizationId: activeOrgId.value,
       action: filterAction.value || undefined,
       limit: pageSize,
       offset: page.value * pageSize

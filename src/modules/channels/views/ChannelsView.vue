@@ -2,11 +2,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { supabase } from '@/services/supabase.client'
 import WidgetConfigEditor from '../components/WidgetConfigEditor.vue'
 import WidgetInstallSnippet from '../components/WidgetInstallSnippet.vue'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 
 interface Channel {
   id: string
@@ -23,13 +25,13 @@ const editingId = ref<string | null>(null)
 const showInstall = ref<string | null>(null)
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
     const { data } = await supabase
       .from('channels')
       .select('*, widget_configs(id)')
-      .eq('organization_id', auth.organizationId)
+      .eq('organization_id', activeOrgId.value)
       .order('created_at', { ascending: false })
     channels.value = (data ?? []).map((c: any) => ({
       ...c,

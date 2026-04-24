@@ -1,7 +1,14 @@
 <!-- Ruta: /src/modules/inbox/views/InboxView.vue -->
+<!-- ═══════════════════════════════════════════════════════════════
+     MODIFICADO en Sprint 6.5:
+       - Usa useActiveOrganizationId() en lugar de auth.organizationId
+       - Esto permite que super_admin en modo soporte vea las
+         conversaciones de la empresa que está visitando (no las suyas)
+     ═══════════════════════════════════════════════════════════════ -->
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseInboxRepo } from '@/repository/supabase/inbox.repo'
 import { useRealtimeInbox } from '@/composables/useRealtimeInbox'
 import type { InboxConversation, InboxFilters } from '@/types/inbox.types'
@@ -11,6 +18,7 @@ import ConversationThread from '../components/ConversationThread.vue'
 import ContactPanel from '../components/ContactPanel.vue'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseInboxRepo()
 
 const conversations = ref<InboxConversation[]>([])
@@ -24,11 +32,11 @@ const filters = ref<InboxFilters>({
 const selected = computed(() => conversations.value.find((c) => c.id === selectedId.value) ?? null)
 
 async function loadConversations() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
     conversations.value = await repo.listConversations(
-      auth.organizationId,
+      activeOrgId.value,
       filters.value,
       auth.user?.id
     )
@@ -39,7 +47,6 @@ async function loadConversations() {
 
 async function handleSelect(id: string) {
   selectedId.value = id
-  // Marcar como leída
   try {
     await repo.markAsRead(id)
     const idx = conversations.value.findIndex((c) => c.id === id)
@@ -50,7 +57,6 @@ async function handleSelect(id: string) {
 }
 
 async function handleConversationUpdate() {
-  // Cuando una acción desde el panel central/derecho modifica la conversación
   await loadConversations()
   if (selectedId.value) {
     const updated = await repo.getConversation(selectedId.value)
@@ -61,25 +67,20 @@ async function handleConversationUpdate() {
   }
 }
 
-// Realtime: al insertar/actualizar conversación o llegar mensaje
 useRealtimeInbox({
-  organizationId: auth.organizationId ?? '',
+  organizationId: activeOrgId.value ?? '',
   onConversationInsert: () => loadConversations(),
   onConversationUpdate: (conv) => {
     const idx = conversations.value.findIndex((c) => c.id === conv.id)
     if (idx >= 0) {
-      // Hacer una recarga parcial (el payload no tiene todos los campos del view)
       repo.getConversation(conv.id).then((updated) => {
         if (updated) conversations.value[idx] = updated
       })
     } else {
-      // Conversación nueva que matches los filtros
       loadConversations()
     }
   },
   onMessageInsert: (msg) => {
-    // Si el mensaje corresponde a una conversación que tenemos en la lista,
-    // actualizamos su preview + lastMessageAt + unreadCount
     const idx = conversations.value.findIndex((c) => c.id === msg.conversation_id)
     if (idx >= 0) {
       conversations.value[idx].lastMessagePreview = (msg.content ?? '').slice(0, 200)
@@ -87,7 +88,6 @@ useRealtimeInbox({
       if (msg.sender_type !== 'agent' && msg.conversation_id !== selectedId.value) {
         conversations.value[idx].unreadCount++
       }
-      // Reordenar por lastMessageAt desc (simple)
       conversations.value.sort((a, b) => {
         if (a.priority !== b.priority) return b.priority - a.priority
         return (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? '')
@@ -97,12 +97,13 @@ useRealtimeInbox({
 })
 
 watch(filters, () => loadConversations(), { deep: true })
+watch(activeOrgId, () => loadConversations())
+
 onMounted(loadConversations)
 </script>
 
 <template>
   <div class="h-full flex bg-surface-muted">
-    <!-- Panel izquierdo: lista -->
     <aside class="w-80 border-r border-surface-border bg-white flex flex-col min-w-0">
       <ConversationList
         :conversations="conversations"
@@ -114,7 +115,6 @@ onMounted(loadConversations)
       />
     </aside>
 
-    <!-- Panel central: thread -->
     <main class="flex-1 flex flex-col min-w-0">
       <ConversationThread
         v-if="selected"
@@ -131,7 +131,6 @@ onMounted(loadConversations)
       </div>
     </main>
 
-    <!-- Panel derecho: contacto -->
     <aside
       v-if="selected"
       class="w-80 border-l border-surface-border bg-white overflow-auto min-w-0"

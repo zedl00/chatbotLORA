@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseAiRepo } from '@/repository/supabase/ai.repo'
 import type { BotPersona, CreateBotPersonaInput } from '@/types/ai.types'
 import {
@@ -10,6 +11,7 @@ import {
 
 const repo = new SupabaseAiRepo()
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 
 const personas = ref<BotPersona[]>([])
 const loading = ref(false)
@@ -44,10 +46,10 @@ function emptyForm(): CreateBotPersonaInput {
 }
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
-    personas.value = await repo.listPersonas(auth.organizationId)
+    personas.value = await repo.listPersonas(activeOrgId.value)
   } finally {
     loading.value = false
   }
@@ -81,7 +83,7 @@ function startEdit(p: BotPersona) {
 }
 
 async function handleSave() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   try {
     if (editing.value) {
       await repo.updatePersona(editing.value.id, form.value)
@@ -89,7 +91,7 @@ async function handleSave() {
       if (!form.value.slug) {
         form.value.slug = form.value.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
       }
-      await repo.createPersona(auth.organizationId, form.value)
+      await repo.createPersona(activeOrgId.value, form.value)
     }
     showForm.value = false
     await load()
@@ -99,8 +101,8 @@ async function handleSave() {
 }
 
 async function makeDefault(p: BotPersona) {
-  if (!auth.organizationId) return
-  await repo.setDefaultPersona(p.id, auth.organizationId)
+  if (!activeOrgId.value) return
+  await repo.setDefaultPersona(p.id, activeOrgId.value)
   await load()
 }
 

@@ -2,10 +2,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { SupabaseRbacRepo } from '@/repository/supabase/rbac.repo'
 import type { InvitationWithRole } from '@/types/rbac.types'
 
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const repo = new SupabaseRbacRepo()
 
 const invitations = ref<InvitationWithRole[]>([])
@@ -14,10 +16,10 @@ const loading = ref(false)
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
-    invitations.value = await repo.listInvitations(auth.organizationId)
+    invitations.value = await repo.listInvitations(activeOrgId.value)
   } finally {
     loading.value = false
   }

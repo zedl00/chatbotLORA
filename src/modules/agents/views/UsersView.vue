@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useActiveOrganizationId } from '@/composables/useActiveOrganizationId'
 import { useCan } from '@/composables/useCan'
 import { SupabaseUserRepo, type UserWithRoles } from '@/repository/supabase/user.repo'
 import { initials } from '@/utils/format'
@@ -11,6 +12,7 @@ import EditUserRolesModal from '../components/EditUserRolesModal.vue'
 
 const repo = new SupabaseUserRepo()
 const auth = useAuthStore()
+const activeOrgId = useActiveOrganizationId()
 const { can } = useCan()
 
 const users = ref<UserWithRoles[]>([])
@@ -33,10 +35,10 @@ const filtered = computed(() =>
 )
 
 async function load() {
-  if (!auth.organizationId) return
+  if (!activeOrgId.value) return
   loading.value = true
   try {
-    users.value = await repo.listUsers(auth.organizationId)
+    users.value = await repo.listUsers(activeOrgId.value)
   } finally {
     loading.value = false
   }
