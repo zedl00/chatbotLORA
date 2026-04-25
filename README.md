@@ -312,3 +312,5 @@ Si algún build falla, pégame el output. Recordatorio política nueva:
 ✅ Si rompo build, lo arreglo sin pedir más archivos
 
 Adelante con la aplicación, te espero. 🚀
+t e s t  
+ 
