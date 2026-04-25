@@ -1,0 +1,53 @@
+# Ruta: .github/workflows/build.yml
+# ═══════════════════════════════════════════════════════════════
+# GitHub Actions — Build Check
+# Se ejecuta en cada push a main y en cada PR.
+# Si npm run build falla, el workflow falla y bloquea el merge.
+# ═══════════════════════════════════════════════════════════════
+
+name: Build Check
+
+# Cuándo se ejecuta este workflow
+on:
+  # Cuando alguien hace push directo a main
+  push:
+    branches:
+      - main
+  # Cuando se abre o actualiza un PR contra main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build LORA
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Bajar el código del repo a la máquina virtual
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Configurar Node.js
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Instalar dependencias
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # 4. TypeScript check + Vite build
+      - name: 🏗️ Build project
+        run: npm run build
+
+      # 5. (Opcional) Mostrar tamaño del bundle
+      - name: 📊 Show bundle size
+        run: |
+          echo "=== Bundle size ==="
+          du -sh dist/ || true
+          echo ""
+          echo "=== Files ==="
+          ls -lh dist/assets/ | head -20 || true
