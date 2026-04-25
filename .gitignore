@@ -19,6 +19,7 @@ lora.zip
 .vite/
 .turbo/
 .DS_Store
+
 # ── Supabase ──────────────────────────────────────
 .supabase/
 supabase/.temp/
@@ -33,13 +34,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Archivos de credenciales y secretos
+# ── Archivos de credenciales y secretos ───────────
 docs/apikeyantropic
 docs/*.key
 *.pem
 *.secret
 credentials.json
 secrets.json
+
+# ── 🆕 Fase 4: ZIPs entregados por Claude ─────────
+# Los ZIPs son entregables temporales, no código fuente
+docs/*.zip
+*.zip
+!.zip-allowlist/*.zip
 
 # ── Editor / OS ───────────────────────────────────
 .DS_Store

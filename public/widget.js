@@ -1,401 +1,472 @@
 /**
- * LORA Chat Widget — Sprint 11
- * Vanilla JS, sin dependencias.
+ * LORA Chat Widget — Sprint 11.6 v2
  *
- * Features:
- *   - Carga config dinámica desde widget-config edge function
- *   - Pre-chat form configurable (nombre/email/phone/motivo)
- *   - Post-chat CSAT con estrellas
- *   - Branding custom por tenant
- *   - Realtime (WebSocket de Supabase)
+ * Fix: El orden de carga era incorrecto. Ahora:
+ * 1. Click 💬 → llama startSession() para obtener settings + crear sesión
+ * 2. Si los settings indican pre-chat → muestra formulario
+ *    (la sesión ya existe; el form solo es para enriquecer visitorData)
+ * 3. Si no requiere → muestra chat directo
  *
  * Uso:
  *   <script>window.LoraChat = { channelId: 'uuid' };</script>
- *   <script async src="https://lora.jabenter.com/widget.js"></script>
+ *   <script async src="https://admin.lorachat.net/widget.js"></script>
  */
 (function () {
   'use strict'
 
-  // ─────────────────────────────────────────────────────
-  // CONFIG
-  // ─────────────────────────────────────────────────────
-  const SUPABASE_URL = 'https://imvahmyywbtcfsduwbdq.supabase.co'
-  const SUPABASE_ANON_KEY = window.LORA_SUPABASE_ANON_KEY || '' // se inyecta en build
+  var SUPABASE_URL = (typeof window !== 'undefined' && window.LORA_SUPABASE_URL) || 'https://imvahmyywbtcfsduwbdq.supabase.co'
+  var SUPABASE_ANON_KEY = (typeof window !== 'undefined' && window.LORA_SUPABASE_ANON_KEY) || ''
 
-  const config = window.LoraChat || {}
+  var config = (typeof window !== 'undefined' && window.LoraChat) || {}
   if (!config.channelId) {
     console.warn('[LORA] channelId no definido. El widget no puede cargar.')
     return
   }
 
-  // State
-  let settings = null
-  let sessionId = null
-  let conversationId = null
-  let contactId = null
-  let preChatData = {}  // datos del form pre-chat
-  let chatStarted = false
-  let realtimeChannel = null
+  // STATE
+  var visitorId = ensureVisitorId()
+  var sessionId = null
+  var conversationId = null
+  var settings = null
+  var publicConfig = {}
+  var aiActive = true
+  var chatStarted = false
+  var realtimeChannel = null
+  var messagesLoaded = []
+
+  var VISITOR_ID_KEY = 'lora_visitor_id'
+  var PUBLIC_CONFIG_KEY = 'lora_public_config'
+  var PUBLIC_CONFIG_TTL = 5 * 60 * 1000
 
   // ─────────────────────────────────────────────────────
-  // FETCH CONFIG
+  // HELPERS
   // ─────────────────────────────────────────────────────
-  async function fetchSettings() {
+  function ensureVisitorId() {
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/functions/v1/widget-config?channel_id=${config.channelId}`,
-        { headers: SUPABASE_ANON_KEY ? { 'apikey': SUPABASE_ANON_KEY } : {} }
-      )
-      if (!res.ok) throw new Error('Config fetch failed')
-      const json = await res.json()
-      settings = json.settings || defaultSettings()
+      var existing = localStorage.getItem(VISITOR_ID_KEY)
+      if (existing) return existing
+      var generated = 'vis_' + uuid()
+      localStorage.setItem(VISITOR_ID_KEY, generated)
+      return generated
     } catch (e) {
-      console.warn('[LORA] Usando config default:', e.message)
-      settings = defaultSettings()
+      return 'vis_' + uuid()
     }
   }
 
-  function defaultSettings() {
+  function uuid() {
+    var template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+    return template.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0
+      var v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
+  }
+
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    })
+  }
+
+  // ─────────────────────────────────────────────────────
+  // PUBLIC CONFIG (URLs y branding global)
+  // ─────────────────────────────────────────────────────
+  async function fetchPublicConfig() {
+    try {
+      var cached = localStorage.getItem(PUBLIC_CONFIG_KEY)
+      if (cached) {
+        var parsed = JSON.parse(cached)
+        if (Date.now() - parsed.ts < PUBLIC_CONFIG_TTL) {
+          publicConfig = parsed.data || {}
+          return
+        }
+      }
+    } catch (e) {}
+
+    try {
+      var headers = SUPABASE_ANON_KEY ? { 'apikey': SUPABASE_ANON_KEY } : {}
+      var res = await fetch(SUPABASE_URL + '/functions/v1/public-config', { headers: headers })
+      if (res.ok) {
+        publicConfig = await res.json()
+        try {
+          localStorage.setItem(PUBLIC_CONFIG_KEY, JSON.stringify({ ts: Date.now(), data: publicConfig }))
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('[LORA] public-config no disponible')
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // API: widget-session
+  // ─────────────────────────────────────────────────────
+  async function startSession(visitorData) {
+    var body = {
+      channelId: config.channelId,
+      visitorId: visitorId,
+      visitorData: visitorData || {}
+    }
+    body.visitorData.currentUrl = body.visitorData.currentUrl || window.location.href
+    body.visitorData.referrer = body.visitorData.referrer || document.referrer || null
+    body.visitorData.userAgent = body.visitorData.userAgent || navigator.userAgent
+
+    var headers = { 'Content-Type': 'application/json' }
+    if (SUPABASE_ANON_KEY) headers['apikey'] = SUPABASE_ANON_KEY
+
+    var res = await fetch(SUPABASE_URL + '/functions/v1/widget-session', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
+    })
+
+    if (!res.ok) {
+      var err = await res.json().catch(function () { return {} })
+      throw new Error(err.error || ('widget-session ' + res.status))
+    }
+
+    var data = await res.json()
+    sessionId = data.sessionId
+    conversationId = data.conversationId
+    settings = data.config || {}
+    aiActive = data.aiActive !== false
+    messagesLoaded = data.messages || []
+
+    console.log('[LORA] Settings cargados:', settings)
+    return data
+  }
+
+  // ─────────────────────────────────────────────────────
+  // API: widget-message
+  // ─────────────────────────────────────────────────────
+  async function sendMessage(text) {
+    var headers = { 'Content-Type': 'application/json' }
+    if (SUPABASE_ANON_KEY) headers['apikey'] = SUPABASE_ANON_KEY
+
+    var res = await fetch(SUPABASE_URL + '/functions/v1/widget-message', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ sessionId: sessionId, message: text })
+    })
+
+    if (!res.ok) {
+      var err = await res.json().catch(function () { return {} })
+      if (res.status === 403 && err.error === 'contact_blocked') {
+        addMessage('bot', err.message || 'No podemos procesar tu mensaje en este momento.')
+        return null
+      }
+      throw new Error(err.error || ('widget-message ' + res.status))
+    }
+    return res.json()
+  }
+
+  // ─────────────────────────────────────────────────────
+  // API: widget-csat
+  // ─────────────────────────────────────────────────────
+  async function sendCSAT(rating, feedback) {
+    var headers = { 'Content-Type': 'application/json' }
+    if (SUPABASE_ANON_KEY) headers['apikey'] = SUPABASE_ANON_KEY
+
+    await fetch(SUPABASE_URL + '/functions/v1/widget-csat', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        rating: rating,
+        feedback: feedback
+      })
+    })
+  }
+
+  // ─────────────────────────────────────────────────────
+  // STYLES
+  // ─────────────────────────────────────────────────────
+  function brandingDefault() {
     return {
-      branding: {
-        primary_color: '#0071E3', position: 'right', offset_x: 20, offset_y: 20,
-        logo_url: null, brand_name: 'Asistente',
-        welcome_message: '¡Hola! ¿En qué puedo ayudarte?',
-        placeholder: 'Escribe tu mensaje...'
-      },
-      pre_chat: {
-        enabled: false, mode: 'required',
-        title: 'Antes de empezar', subtitle: 'Ayúdanos a atenderte mejor',
-        submit_label: 'Iniciar conversación', skip_label: 'Chatear como invitado',
-        fields: []
-      },
-      post_chat: {
-        enabled: false, ask_csat: true,
-        title: '¿Cómo fue tu atención?', subtitle: 'Tu opinión nos ayuda a mejorar',
-        thank_you_message: '¡Gracias por tu tiempo!',
-        comment_enabled: false, comment_placeholder: 'Cuéntanos más (opcional)'
-      }
+      primaryColor: '#0071E3',
+      accentColor: '#0071E3',
+      position: 'right',
+      brandName: publicConfig.brand_name || 'Asistente',
+      logoUrl: null,
+      welcomeTitle: '¡Hola! ¿En qué podemos ayudarte?',
+      welcomeSubtitle: 'Te respondemos en minutos',
+      inputPlaceholder: 'Escribe tu mensaje...',
+      offlineMessage: 'Estamos fuera de línea. Déjanos un mensaje.',
+      launcherIcon: '💬',
+      requireName: false,
+      requireEmail: false,
+      requirePhone: false,
+      preChatMessage: null,
+      autoOpen: false,
+      autoOpenDelayMs: 0,
+      showPoweredBy: true
     }
   }
 
-  // ─────────────────────────────────────────────────────
-  // STYLES (inyectados)
-  // ─────────────────────────────────────────────────────
   function injectStyles() {
-    const s = settings.branding
-    const css = `
-      #lora-chat-root *, #lora-chat-root *::before, #lora-chat-root *::after {
-        box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      #lora-chat-fab {
-        position: fixed; ${s.position === 'left' ? 'left' : 'right'}: ${s.offset_x}px;
-        bottom: ${s.offset_y}px; width: 60px; height: 60px; border-radius: 50%;
-        background: ${s.primary_color}; color: white; display: flex; align-items: center;
-        justify-content: center; cursor: pointer; z-index: 999998;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.2s;
-        border: none; font-size: 28px;
-      }
-      #lora-chat-fab:hover { transform: scale(1.05); }
-      #lora-chat-window {
-        position: fixed; ${s.position === 'left' ? 'left' : 'right'}: ${s.offset_x}px;
-        bottom: ${s.offset_y + 80}px; width: 380px; height: 560px; max-height: calc(100vh - 120px);
-        background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-        display: none; flex-direction: column; z-index: 999999; overflow: hidden;
-        animation: lora-slide-up 0.3s ease-out;
-      }
-      @keyframes lora-slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-      #lora-chat-window.open { display: flex; }
-      #lora-chat-header {
-        padding: 16px; background: ${s.primary_color}; color: white; display: flex;
-        align-items: center; gap: 10px; flex-shrink: 0;
-      }
-      #lora-chat-header-logo { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-weight: 600; overflow: hidden; }
-      #lora-chat-header-logo img { width: 100%; height: 100%; object-fit: cover; }
-      #lora-chat-close { margin-left: auto; background: transparent; border: none; color: white; cursor: pointer; font-size: 18px; opacity: 0.8; padding: 4px; }
-      #lora-chat-close:hover { opacity: 1; }
-      #lora-chat-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #f8f9fa; }
-      .lora-msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; }
-      .lora-msg-contact { background: ${s.primary_color}; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-      .lora-msg-bot, .lora-msg-agent { background: white; color: #1e293b; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0; }
-      #lora-chat-input-row { padding: 12px; border-top: 1px solid #e2e8f0; background: white; display: flex; gap: 8px; flex-shrink: 0; }
-      #lora-chat-input { flex: 1; border: 1px solid #cbd5e1; border-radius: 20px; padding: 8px 14px; font-size: 14px; outline: none; }
-      #lora-chat-input:focus { border-color: ${s.primary_color}; }
-      #lora-chat-send { background: ${s.primary_color}; color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; font-size: 16px; flex-shrink: 0; }
-      #lora-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
-      .lora-form { padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; flex: 1; background: #f8f9fa; overflow-y: auto; }
-      .lora-form-title { font-size: 17px; font-weight: 600; color: #1e293b; margin: 0; }
-      .lora-form-subtitle { font-size: 13px; color: #64748b; margin: 0 0 8px 0; }
-      .lora-form-field { display: flex; flex-direction: column; gap: 4px; }
-      .lora-form-label { font-size: 12px; color: #475569; font-weight: 500; }
-      .lora-form-label .lora-req { color: #ef4444; margin-left: 2px; }
-      .lora-form-input, .lora-form-select {
-        padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;
-        outline: none; background: white; width: 100%;
-      }
-      .lora-form-input:focus, .lora-form-select:focus { border-color: ${s.primary_color}; }
-      .lora-form-button {
-        margin-top: 8px; padding: 12px; background: ${s.primary_color}; color: white; border: none;
-        border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer;
-      }
-      .lora-form-button:hover { filter: brightness(1.05); }
-      .lora-form-skip {
-        padding: 8px; background: transparent; border: none; color: #64748b; font-size: 13px;
-        cursor: pointer; text-decoration: underline;
-      }
-      .lora-form-error { color: #ef4444; font-size: 12px; margin-top: -2px; }
-      .lora-postchat { padding: 24px 20px; display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; flex: 1; background: #f8f9fa; }
-      .lora-stars { display: flex; gap: 8px; font-size: 36px; color: #cbd5e1; }
-      .lora-star { cursor: pointer; transition: color 0.15s, transform 0.15s; }
-      .lora-star:hover { transform: scale(1.15); }
-      .lora-star.active { color: #f59e0b; }
-      .lora-thank-you { padding: 40px 20px; text-align: center; background: #f8f9fa; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-      .lora-thank-you-emoji { font-size: 48px; }
-      .lora-thank-you-text { font-size: 16px; color: #334155; font-weight: 500; }
-    `
-    const styleEl = document.createElement('style')
+    var s = Object.assign(brandingDefault(), settings || {})
+    var color = s.primaryColor || '#0071E3'
+    var pos = s.position === 'left' ? 'left' : 'right'
+
+    var css = [
+      "#lora-chat-root *, #lora-chat-root *::before, #lora-chat-root *::after { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
+      "#lora-chat-fab { position: fixed; " + pos + ": 20px; bottom: 20px; width: 60px; height: 60px; border-radius: 50%; background: " + color + "; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 999998; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: none; font-size: 28px; transition: transform 0.2s; }",
+      "#lora-chat-fab:hover { transform: scale(1.05); }",
+      "#lora-chat-window { position: fixed; " + pos + ": 20px; bottom: 100px; width: 380px; height: 560px; max-height: calc(100vh - 120px); background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); display: none; flex-direction: column; z-index: 999999; overflow: hidden; }",
+      "#lora-chat-window.open { display: flex; animation: lora-slide-up 0.3s ease-out; }",
+      "@keyframes lora-slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }",
+      "#lora-chat-header { padding: 16px; background: " + color + "; color: white; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }",
+      "#lora-chat-header-logo { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-weight: 600; overflow: hidden; }",
+      "#lora-chat-header-logo img { width: 100%; height: 100%; object-fit: cover; }",
+      "#lora-chat-close { margin-left: auto; background: transparent; border: none; color: white; cursor: pointer; font-size: 18px; opacity: 0.8; padding: 4px; }",
+      "#lora-chat-close:hover { opacity: 1; }",
+      "#lora-chat-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #f8f9fa; }",
+      ".lora-msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; }",
+      ".lora-msg-contact { background: " + color + "; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }",
+      ".lora-msg-bot, .lora-msg-agent { background: white; color: #1e293b; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0; }",
+      "#lora-chat-input-row { padding: 12px; border-top: 1px solid #e2e8f0; background: white; display: flex; gap: 8px; flex-shrink: 0; }",
+      "#lora-chat-input { flex: 1; border: 1px solid #cbd5e1; border-radius: 20px; padding: 8px 14px; font-size: 14px; outline: none; }",
+      "#lora-chat-input:focus { border-color: " + color + "; }",
+      "#lora-chat-send { background: " + color + "; color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; font-size: 16px; flex-shrink: 0; }",
+      "#lora-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }",
+      ".lora-form { padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; flex: 1; background: #f8f9fa; overflow-y: auto; }",
+      ".lora-form-title { font-size: 17px; font-weight: 600; color: #1e293b; margin: 0; }",
+      ".lora-form-subtitle { font-size: 13px; color: #64748b; margin: 0 0 8px 0; }",
+      ".lora-form-field { display: flex; flex-direction: column; gap: 4px; }",
+      ".lora-form-label { font-size: 12px; color: #475569; font-weight: 500; }",
+      ".lora-form-label .lora-req { color: #ef4444; margin-left: 2px; }",
+      ".lora-form-input { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; background: white; width: 100%; }",
+      ".lora-form-input:focus { border-color: " + color + "; }",
+      ".lora-form-button { margin-top: 8px; padding: 12px; background: " + color + "; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }",
+      ".lora-form-button:hover { filter: brightness(1.05); }",
+      ".lora-form-error { color: #ef4444; font-size: 12px; margin-top: -2px; }",
+      ".lora-thank-you { padding: 40px 20px; text-align: center; background: #f8f9fa; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }",
+      ".lora-thank-you-emoji { font-size: 48px; }",
+      ".lora-thank-you-text { font-size: 16px; color: #334155; font-weight: 500; }",
+      ".lora-powered-by { padding: 6px 12px; text-align: center; font-size: 10px; color: #94a3b8; background: white; border-top: 1px solid #f1f5f9; }",
+      ".lora-powered-by a { color: " + color + "; text-decoration: none; }",
+      ".lora-loading { padding: 40px 20px; text-align: center; color: #94a3b8; flex: 1; display: flex; align-items: center; justify-content: center; }"
+    ].join('\n')
+
+    var existing = document.getElementById('lora-chat-styles')
+    if (existing) existing.remove()
+    var styleEl = document.createElement('style')
     styleEl.id = 'lora-chat-styles'
     styleEl.textContent = css
     document.head.appendChild(styleEl)
   }
 
   // ─────────────────────────────────────────────────────
-  // API helpers
+  // RENDER
   // ─────────────────────────────────────────────────────
-  async function apiCall(path, body) {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(SUPABASE_ANON_KEY ? { 'apikey': SUPABASE_ANON_KEY } : {})
-      },
-      body: JSON.stringify(body)
-    })
-    if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`)
-    return res.json()
+  var root
+
+  function ensureRoot() {
+    root = document.getElementById('lora-chat-root')
+    if (!root) {
+      root = document.createElement('div')
+      root.id = 'lora-chat-root'
+      document.body.appendChild(root)
+    }
   }
 
-  // ─────────────────────────────────────────────────────
-  // RENDER FUNCTIONS
-  // ─────────────────────────────────────────────────────
-  const root = document.createElement('div')
-  root.id = 'lora-chat-root'
-  document.body.appendChild(root)
-
   function renderFab() {
-    root.innerHTML = `
-      <button id="lora-chat-fab" aria-label="Abrir chat">💬</button>
-      <div id="lora-chat-window" role="dialog" aria-label="Chat"></div>
-    `
+    var s = Object.assign(brandingDefault(), settings || {})
+    root.innerHTML =
+      '<button id="lora-chat-fab" aria-label="Abrir chat">' + escapeHtml(s.launcherIcon || '💬') + '</button>' +
+      '<div id="lora-chat-window" role="dialog" aria-label="Chat"></div>'
     document.getElementById('lora-chat-fab').onclick = toggleWindow
   }
 
-  function toggleWindow() {
-    const w = document.getElementById('lora-chat-window')
-    if (w.classList.contains('open')) {
-      w.classList.remove('open')
-    } else {
-      openWindow()
-    }
+  function renderHeader() {
+    var s = Object.assign(brandingDefault(), settings || {})
+    var initial = (s.brandName || 'L').charAt(0).toUpperCase()
+    return [
+      '<div id="lora-chat-header">',
+      '  <div id="lora-chat-header-logo">',
+      s.logoUrl ? '<img src="' + escapeHtml(s.logoUrl) + '" alt="' + escapeHtml(s.brandName) + '"/>' : escapeHtml(initial),
+      '  </div>',
+      '  <div style="display:flex;flex-direction:column;">',
+      '    <strong style="font-size:14px;">' + escapeHtml(s.brandName) + '</strong>',
+      '    <span style="font-size:11px;opacity:0.8;">' + (aiActive ? 'En línea' : 'Conectándote con un agente') + '</span>',
+      '  </div>',
+      '  <button id="lora-chat-close" aria-label="Cerrar">✕</button>',
+      '</div>'
+    ].join('')
   }
 
-  function openWindow() {
-    const w = document.getElementById('lora-chat-window')
-    w.classList.add('open')
-
-    // Decidir qué mostrar
-    if (!chatStarted) {
-      if (settings.pre_chat.enabled) {
-        renderPreChatForm()
-      } else {
-        startChat()
-      }
-    } else {
-      // Ya hay chat en curso
-      renderChatUI()
-    }
-  }
-
-  function renderHeader(closeHandler) {
-    const s = settings.branding
-    const initial = (s.brand_name || 'L').charAt(0).toUpperCase()
-    return `
-      <div id="lora-chat-header">
-        <div id="lora-chat-header-logo">
-          ${s.logo_url ? `<img src="${s.logo_url}" alt="${s.brand_name}"/>` : initial}
-        </div>
-        <div style="display:flex;flex-direction:column;">
-          <strong style="font-size:14px;">${escape(s.brand_name)}</strong>
-          <span style="font-size:11px;opacity:0.8;">En línea</span>
-        </div>
-        <button id="lora-chat-close" aria-label="Cerrar">✕</button>
-      </div>
-    `
+  function renderPoweredBy() {
+    var s = Object.assign(brandingDefault(), settings || {})
+    if (!s.showPoweredBy) return ''
+    return '<div class="lora-powered-by">Powered by <a href="' + (publicConfig.landing_url || 'https://lorachat.net') + '" target="_blank">' + escapeHtml(publicConfig.brand_name || 'LORA') + '</a></div>'
   }
 
   function attachHeaderClose() {
-    const btn = document.getElementById('lora-chat-close')
+    var btn = document.getElementById('lora-chat-close')
     if (btn) btn.onclick = toggleWindow
   }
 
+  function renderLoading() {
+    var w = document.getElementById('lora-chat-window')
+    w.innerHTML = renderHeader() + '<div class="lora-loading">Cargando...</div>'
+    attachHeaderClose()
+  }
+
+  // ─────────────────────────────────────────────────────
+  // PRE-CHAT
+  // ─────────────────────────────────────────────────────
+  function needsPreChat() {
+    if (!settings) return false
+    return !!(settings.requireName || settings.requireEmail || settings.requirePhone)
+  }
+
   function renderPreChatForm() {
-    const w = document.getElementById('lora-chat-window')
-    const pc = settings.pre_chat
+    var s = Object.assign(brandingDefault(), settings || {})
+    var w = document.getElementById('lora-chat-window')
+    var fields = []
 
-    const visibleFields = (pc.fields || [])
-      .filter(f => f.visible)
-      .sort((a, b) => a.order - b.order)
+    if (s.requireName) fields.push({ key: 'name', label: 'Nombre', type: 'text' })
+    if (s.requireEmail) fields.push({ key: 'email', label: 'Email', type: 'email' })
+    if (s.requirePhone) fields.push({ key: 'phone', label: 'Teléfono', type: 'tel' })
 
-    const fieldsHtml = visibleFields.map(f => {
-      const reqMark = f.required ? '<span class="lora-req">*</span>' : ''
-      if (f.key === 'reason') {
-        const opts = (f.options || []).map(o => `<option value="${escape(o)}">${escape(o)}</option>`).join('')
-        return `
-          <div class="lora-form-field">
-            <label class="lora-form-label">${escape(f.label)}${reqMark}</label>
-            <select class="lora-form-select" data-field="${f.key}" ${f.required ? 'required' : ''}>
-              <option value="">Selecciona una opción</option>
-              ${opts}
-            </select>
-          </div>
-        `
-      }
-      const type = f.key === 'email' ? 'email' : (f.key === 'phone' ? 'tel' : 'text')
-      return `
-        <div class="lora-form-field">
-          <label class="lora-form-label">${escape(f.label)}${reqMark}</label>
-          <input
-            type="${type}"
-            class="lora-form-input"
-            data-field="${f.key}"
-            placeholder="${escape(f.placeholder || '')}"
-            ${f.required ? 'required' : ''}
-          />
-        </div>
-      `
+    var fieldsHtml = fields.map(function (f) {
+      return '<div class="lora-form-field">' +
+        '<label class="lora-form-label">' + escapeHtml(f.label) + '<span class="lora-req">*</span></label>' +
+        '<input type="' + f.type + '" class="lora-form-input" data-field="' + f.key + '" required/>' +
+        '</div>'
     }).join('')
 
-    const skipBtn = pc.mode === 'optional'
-      ? `<button type="button" class="lora-form-skip" id="lora-form-skip">${escape(pc.skip_label)}</button>`
-      : ''
+    var preMsg = s.preChatMessage
+      ? '<p class="lora-form-subtitle">' + escapeHtml(s.preChatMessage) + '</p>'
+      : '<p class="lora-form-subtitle">Cuéntanos un poco antes de empezar</p>'
 
-    w.innerHTML = `
-      ${renderHeader()}
-      <form class="lora-form" id="lora-prechat-form">
-        <h3 class="lora-form-title">${escape(pc.title)}</h3>
-        <p class="lora-form-subtitle">${escape(pc.subtitle)}</p>
-        ${fieldsHtml}
-        <div id="lora-form-error" class="lora-form-error" style="display:none;"></div>
-        <button type="submit" class="lora-form-button">${escape(pc.submit_label)}</button>
-        ${skipBtn}
-      </form>
-    `
+    w.innerHTML = renderHeader() +
+      '<form class="lora-form" id="lora-prechat-form">' +
+      '  <h3 class="lora-form-title">' + escapeHtml(s.welcomeTitle) + '</h3>' +
+      preMsg +
+      fieldsHtml +
+      '  <div id="lora-form-error" class="lora-form-error" style="display:none;"></div>' +
+      '  <button type="submit" class="lora-form-button">Iniciar conversación</button>' +
+      '</form>' + renderPoweredBy()
 
     attachHeaderClose()
     document.getElementById('lora-prechat-form').onsubmit = handlePreChatSubmit
-    const skip = document.getElementById('lora-form-skip')
-    if (skip) skip.onclick = () => { preChatData = {}; startChat() }
+
+    // Focus en el primer campo
+    var firstInput = w.querySelector('input[data-field]')
+    if (firstInput) firstInput.focus()
   }
 
-  function handlePreChatSubmit(e) {
+  async function handlePreChatSubmit(e) {
     e.preventDefault()
-    const form = e.target
-    const data = {}
-    const pc = settings.pre_chat
+    var form = e.target
+    var data = {}
+    var s = Object.assign(brandingDefault(), settings || {})
+    var fields = []
+    if (s.requireName) fields.push({ key: 'name', label: 'Nombre', validate: function (v) { return v.length > 0 } })
+    if (s.requireEmail) fields.push({ key: 'email', label: 'Email', validate: function (v) { return /^\S+@\S+\.\S+$/.test(v) } })
+    if (s.requirePhone) fields.push({ key: 'phone', label: 'Teléfono', validate: function (v) { return v.length >= 6 } })
 
-    for (const f of (pc.fields || []).filter(x => x.visible)) {
-      const el = form.querySelector(`[data-field="${f.key}"]`)
-      if (!el) continue
-      const val = (el.value || '').trim()
-      if (f.required && !val) {
-        showFormError(`Completa: ${f.label}`)
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i]
+      var el = form.querySelector('[data-field="' + f.key + '"]')
+      var val = (el.value || '').trim()
+      if (!val || !f.validate(val)) {
+        showFormError('Por favor completa correctamente: ' + f.label)
         return
       }
-      if (f.key === 'email' && val && !/^\S+@\S+\.\S+$/.test(val)) {
-        showFormError('Email no válido')
-        return
-      }
-      if (val) data[f.key] = val
+      data[f.key] = val
     }
-    preChatData = data
-    startChat()
+
+    try {
+      // Re-llamar startSession con los datos del visitante
+      // Esto actualiza el contacto existente con nombre/email/teléfono
+      await startSession(data)
+      chatStarted = true
+      renderChatUI()
+      subscribeRealtime()
+    } catch (err) {
+      showFormError(err.message || 'Error iniciando chat')
+    }
   }
 
   function showFormError(msg) {
-    const el = document.getElementById('lora-form-error')
-    if (el) { el.textContent = msg; el.style.display = 'block' }
+    var el = document.getElementById('lora-form-error')
+    if (el) {
+      el.textContent = msg
+      el.style.display = 'block'
+    }
   }
 
   // ─────────────────────────────────────────────────────
   // CHAT UI
   // ─────────────────────────────────────────────────────
-  async function startChat() {
-    try {
-      const res = await apiCall('widget-session', {
-        channel_id: config.channelId,
-        pre_chat_data: preChatData
-      })
-      sessionId = res.session_id
-      conversationId = res.conversation_id
-      contactId = res.contact_id
-      chatStarted = true
-      renderChatUI()
-      subscribeRealtime()
-    } catch (e) {
-      console.error('[LORA] Error iniciando chat:', e)
-      alert('No se pudo iniciar el chat. Inténtalo más tarde.')
-    }
-  }
-
   function renderChatUI() {
-    const w = document.getElementById('lora-chat-window')
-    const s = settings.branding
-    w.innerHTML = `
-      ${renderHeader()}
-      <div id="lora-chat-body"></div>
-      <div id="lora-chat-input-row">
-        <input id="lora-chat-input" type="text" placeholder="${escape(s.placeholder)}" />
-        <button id="lora-chat-send" aria-label="Enviar">→</button>
-      </div>
-    `
+    var s = Object.assign(brandingDefault(), settings || {})
+    var w = document.getElementById('lora-chat-window')
+
+    w.innerHTML = renderHeader() +
+      '<div id="lora-chat-body"></div>' +
+      '<div id="lora-chat-input-row">' +
+      '  <input id="lora-chat-input" type="text" placeholder="' + escapeHtml(s.inputPlaceholder) + '"/>' +
+      '  <button id="lora-chat-send" aria-label="Enviar">→</button>' +
+      '</div>' + renderPoweredBy()
+
     attachHeaderClose()
 
-    // Mensaje de bienvenida (solo visual, no se guarda)
-    addMessage('bot', s.welcome_message)
+    // Cargar mensajes existentes (visita recurrente con conversación abierta)
+    if (messagesLoaded.length > 0) {
+      messagesLoaded.forEach(function (m) {
+        addMessage(m.sender_type, m.content)
+      })
+    } else {
+      // Primera vez: bienvenida del bot
+      var welcome = s.welcomeTitle
+      if (s.welcomeSubtitle) welcome += '\n' + s.welcomeSubtitle
+      addMessage('bot', welcome)
+    }
 
-    const input = document.getElementById('lora-chat-input')
-    const sendBtn = document.getElementById('lora-chat-send')
-
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() }
+    var input = document.getElementById('lora-chat-input')
+    var sendBtn = document.getElementById('lora-chat-send')
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        handleSend()
+      }
     })
-    sendBtn.onclick = sendMsg
+    sendBtn.onclick = handleSend
+    input.focus()
   }
 
-  async function sendMsg() {
-    const input = document.getElementById('lora-chat-input')
-    const text = (input.value || '').trim()
+  async function handleSend() {
+    var input = document.getElementById('lora-chat-input')
+    var text = (input.value || '').trim()
     if (!text) return
-
     addMessage('contact', text)
     input.value = ''
     input.focus()
 
     try {
-      await apiCall('widget-message', {
-        session_id: sessionId,
-        content: text
-      })
+      var res = await sendMessage(text)
+      if (!res) return
+
+      if (res.botMessage && res.botMessage.content) {
+        addMessage('bot', res.botMessage.content)
+      } else if (res.botError) {
+        addMessage('bot', '⚠️ ' + res.botError)
+      } else if (res.awaitingHuman) {
+        addMessage('bot', 'Un agente te responderá pronto.')
+      }
     } catch (e) {
-      console.error('[LORA] Error enviando:', e)
+      console.error('[LORA] Error enviando mensaje:', e)
       addMessage('bot', '⚠️ No se pudo enviar. Inténtalo de nuevo.')
     }
   }
 
   function addMessage(senderType, content) {
-    const body = document.getElementById('lora-chat-body')
+    var body = document.getElementById('lora-chat-body')
     if (!body) return
-    const el = document.createElement('div')
-    el.className = `lora-msg lora-msg-${senderType}`
+    var el = document.createElement('div')
+    el.className = 'lora-msg lora-msg-' + senderType
     el.textContent = content
     body.appendChild(el)
     body.scrollTop = body.scrollHeight
@@ -405,132 +476,118 @@
   // REALTIME
   // ─────────────────────────────────────────────────────
   function subscribeRealtime() {
-    if (!window.supabase || !window.supabase.createClient) {
-      // Cargar supabase-js dinámicamente
-      const s = document.createElement('script')
-      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'
-      s.onload = () => doSubscribe()
-      document.head.appendChild(s)
-    } else {
+    if (!conversationId) return
+    if (window.supabase && window.supabase.createClient) {
       doSubscribe()
+      return
     }
+    var s = document.createElement('script')
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'
+    s.onload = doSubscribe
+    document.head.appendChild(s)
   }
 
   function doSubscribe() {
     if (!window.supabase || !SUPABASE_ANON_KEY) return
-    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    realtimeChannel = client
-      .channel(`widget-${conversationId}`)
+    if (realtimeChannel) {
+      try { realtimeChannel.unsubscribe() } catch (e) {}
+    }
+    var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    realtimeChannel = client.channel('widget-' + conversationId)
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const msg = payload.new
-          // Mostrar solo mensajes del bot/agent (no eco del cliente ni whispers ni system)
-          if (msg.sender_type === 'bot' || msg.sender_type === 'agent') {
-            addMessage(msg.sender_type, msg.content)
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: 'conversation_id=eq.' + conversationId
+        },
+        function (payload) {
+          var msg = payload.new
+          if (msg.sender_type === 'agent') {
+            addMessage('agent', msg.content)
           }
         }
-      )
-      .subscribe()
+      ).subscribe()
   }
 
   // ─────────────────────────────────────────────────────
-  // POST-CHAT (se dispara cuando conversación pasa a resolved)
+  // OPEN / CLOSE — FLUJO CORRECTO
   // ─────────────────────────────────────────────────────
-  function showPostChat() {
-    const pc = settings.post_chat
-    if (!pc.enabled) return closeAndReset()
-
-    const w = document.getElementById('lora-chat-window')
-    w.innerHTML = `
-      ${renderHeader()}
-      <div class="lora-postchat">
-        <div style="font-size:40px;">⭐</div>
-        <h3 class="lora-form-title">${escape(pc.title)}</h3>
-        <p class="lora-form-subtitle">${escape(pc.subtitle)}</p>
-        ${pc.ask_csat ? `<div class="lora-stars" id="lora-stars" role="radiogroup" aria-label="Calificación">
-          ${[1,2,3,4,5].map(n => `<span class="lora-star" data-star="${n}" role="radio">★</span>`).join('')}
-        </div>` : ''}
-        ${pc.comment_enabled ? `<textarea id="lora-comment" class="lora-form-input" rows="3" placeholder="${escape(pc.comment_placeholder)}"></textarea>` : ''}
-        <button class="lora-form-button" id="lora-submit-csat">Enviar</button>
-        <button class="lora-form-skip" id="lora-skip-csat">Saltar</button>
-      </div>
-    `
-    attachHeaderClose()
-
-    let rating = 0
-    if (pc.ask_csat) {
-      const stars = document.querySelectorAll('.lora-star')
-      stars.forEach(star => {
-        star.onclick = () => {
-          rating = parseInt(star.dataset.star)
-          stars.forEach(s => s.classList.toggle('active', parseInt(s.dataset.star) <= rating))
-        }
-      })
+  async function toggleWindow() {
+    var w = document.getElementById('lora-chat-window')
+    if (w.classList.contains('open')) {
+      w.classList.remove('open')
+      return
     }
-
-    document.getElementById('lora-submit-csat').onclick = async () => {
-      const comment = pc.comment_enabled ? (document.getElementById('lora-comment').value || '') : ''
-      if (pc.ask_csat && rating === 0) {
-        alert('Por favor selecciona una calificación')
-        return
-      }
-      try {
-        await apiCall('widget-csat', {
-          conversation_id: conversationId,
-          rating: rating || null,
-          feedback: comment || null
-        })
-      } catch (e) {
-        console.warn('[LORA] Error CSAT:', e)
-      }
-      showThankYou()
-    }
-
-    document.getElementById('lora-skip-csat').onclick = showThankYou
+    await openWindow()
   }
 
-  function showThankYou() {
-    const pc = settings.post_chat
-    const w = document.getElementById('lora-chat-window')
-    w.innerHTML = `
-      ${renderHeader()}
-      <div class="lora-thank-you">
-        <div class="lora-thank-you-emoji">🙏</div>
-        <div class="lora-thank-you-text">${escape(pc.thank_you_message)}</div>
-      </div>
-    `
+  async function openWindow() {
+    var w = document.getElementById('lora-chat-window')
+    w.classList.add('open')
+
+    // Si ya estaba el chat iniciado en esta sesión de pestaña, mostrar directo
+    if (chatStarted) {
+      renderChatUI()
+      return
+    }
+
+    // Mostrar loader mientras carga settings
+    renderLoading()
+
+    try {
+      // 1. Cargar settings + sesión
+      await startSession({})
+
+      // 2. Inyectar estilos con los settings ya cargados (color correcto, etc.)
+      injectStyles()
+      // Re-renderizar el FAB con el icono correcto
+      var fab = document.getElementById('lora-chat-fab')
+      if (fab && settings && settings.launcherIcon) {
+        fab.textContent = settings.launcherIcon
+      }
+
+      // 3. Decidir: pre-chat o chat directo
+      if (needsPreChat()) {
+        console.log('[LORA] Mostrando pre-chat porque settings tiene requireName/Email/Phone')
+        renderPreChatForm()
+      } else {
+        console.log('[LORA] Sin pre-chat, abriendo chat directo')
+        chatStarted = true
+        renderChatUI()
+        subscribeRealtime()
+      }
+    } catch (e) {
+      console.error('[LORA] Error iniciando chat:', e)
+      showFatalError(e.message || 'No se pudo iniciar el chat')
+    }
+  }
+
+  function showFatalError(msg) {
+    var w = document.getElementById('lora-chat-window')
+    w.innerHTML = renderHeader() +
+      '<div class="lora-thank-you">' +
+      '  <div class="lora-thank-you-emoji">⚠️</div>' +
+      '  <div class="lora-thank-you-text">' + escapeHtml(msg) + '</div>' +
+      '</div>'
     attachHeaderClose()
-    setTimeout(closeAndReset, 3000)
   }
 
   function closeAndReset() {
-    const w = document.getElementById('lora-chat-window')
+    var w = document.getElementById('lora-chat-window')
     if (w) w.classList.remove('open')
-    // Reset para próxima vez
-    sessionId = null
-    conversationId = null
-    contactId = null
-    preChatData = {}
-    chatStarted = false
     if (realtimeChannel) {
-      try { realtimeChannel.unsubscribe() } catch {}
+      try { realtimeChannel.unsubscribe() } catch (e) {}
       realtimeChannel = null
     }
-  }
-
-  // ─────────────────────────────────────────────────────
-  // Utils
-  // ─────────────────────────────────────────────────────
-  function escape(s) {
-    return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
   }
 
   // ─────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────
   async function init() {
-    await fetchSettings()
+    ensureRoot()
+    await fetchPublicConfig()
     injectStyles()
     renderFab()
   }
@@ -541,10 +598,18 @@
     init()
   }
 
-  // Expose API para testing / triggers externos
   window.LoraChatAPI = {
-    open: openWindow,
+    open: function () { openWindow() },
     close: closeAndReset,
-    showPostChat: showPostChat  // útil para probar manualmente
+    sendCSAT: sendCSAT,
+    reset: function () {
+      try { localStorage.removeItem(VISITOR_ID_KEY) } catch (e) {}
+      try { localStorage.removeItem(PUBLIC_CONFIG_KEY) } catch (e) {}
+      sessionId = null
+      conversationId = null
+      chatStarted = false
+      visitorId = ensureVisitorId()
+      console.log('[LORA] Visitor reseteado:', visitorId)
+    }
   }
 })()

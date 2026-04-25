@@ -1,339 +1,310 @@
-# 📝 Sprint 11 — Widget Update + Pre-chat + Post-chat
+# 🔧 Sprint 11.6 — System Configuration (parametrización global)
 
-Widget web completamente reimaginado: configurable, con pre-chat form (obligatorio u opcional), post-chat CSAT, y sistema de ayuda in-app integrado.
-
----
-
-## 📦 Archivos (14)
-
-| Ruta | Tipo | Descripción |
-|---|---|---|
-| `supabase/migrations/2026_sprint_11.sql` | 🆕 SQL | Default settings, helper RPC, permiso |
-| `supabase/functions/widget-config/index.ts` | 🆕 Edge | Endpoint público para leer settings |
-| `supabase/functions/widget-csat/index.ts` | 🆕 Edge | Recibe rating del post-chat |
-| `src/types/widget.types.ts` | 🆕 Tipos | Todos los tipos + defaults + merge helper |
-| `src/repository/supabase/widget-config.repo.ts` | 🆕 Repo | CRUD de settings |
-| `src/modules/channels/views/WidgetConfigView.vue` | 🆕 Vista | Vista principal con tabs |
-| `src/modules/channels/components/widget-config/WidgetAppearanceTab.vue` | 🆕 | Colores, posición, logo, mensajes |
-| `src/modules/channels/components/widget-config/WidgetPreChatTab.vue` | 🆕 | Editor completo pre-chat |
-| `src/modules/channels/components/widget-config/WidgetPostChatTab.vue` | 🆕 | Editor post-chat CSAT |
-| `src/modules/channels/components/widget-config/WidgetInstallationTab.vue` | 🆕 | Snippet + instrucciones |
-| `src/modules/channels/components/widget-config/WidgetFieldEditor.vue` | 🆕 | Fila individual de campo |
-| `src/modules/channels/components/widget-config/help/HelpTooltip.vue` | 🆕 | Tooltip premium reutilizable |
-| `src/modules/channels/components/widget-config/help/WidgetConfigHelpPanel.vue` | 🆕 | Panel slide-in con docs |
-| `src/router/index.ts` | 🔧 | + ruta `/admin/channels/widget/:id` |
-| `public/widget.js` | 🔄 | REEMPLAZADO - con pre-chat + post-chat + settings dinámicos |
+Tabla `system_config` editable desde el admin con vista premium para super_admin.
+URLs ya no hardcoded; se leen del store Pinia con cache + fallback.
 
 ---
 
-## 🚀 Aplicación paso a paso
+## 📦 Contenido del ZIP
 
-### 1. SQL (Supabase SQL Editor)
+### Archivos NUEVOS (10) — copiar directo
 
-Pega `2026_sprint_11.sql` → Run.
+| Archivo | Tipo |
+|---|---|
+| `supabase/migrations/2026_sprint_11_6.sql` | SQL migration |
+| `supabase/functions/public-config/index.ts` | Edge Function pública |
+| `src/types/system-config.types.ts` | Tipos |
+| `src/repository/supabase/system-config.repo.ts` | Repo CRUD |
+| `src/stores/system-config.store.ts` | Pinia store |
+| `src/composables/useSystemConfig.ts` | Composable |
+| `src/modules/super-admin/views/SystemConfigView.vue` | Vista admin |
+| `src/modules/super-admin/components/ConfigItemEditor.vue` | Editor inline |
+| `src/modules/super-admin/components/help/SystemConfigHelpPanel.vue` | Help panel |
+| `public/widget.js` | Widget actualizado (parametrizado) |
 
-**Verificaciones esperadas:**
+### Archivos REEMPLAZADOS (creados por mí en Sprint 11.5, sin riesgo)
+
+| Archivo | Razón |
+|---|---|
+| `src/modules/channels/components/ChannelCard.vue` | Usa `useSystemConfig().widgetUrl` |
+| `src/modules/channels/components/widget-config/WidgetInstallationTab.vue` | Usa `useSystemConfig().widgetUrl` |
+
+### Archivos COMPARTIDOS — parches quirúrgicos abajo (NO REEMPLAZAR)
+
+- `src/router/index.ts` → agregar 1 ruta hija
+- `src/layouts/AdminLayout.vue` → agregar 1 nav item
+- `src/main.ts` o `src/App.vue` → cargar config al iniciar
+
+---
+
+## 🚀 Aplicación — orden estricto
+
+### 1️⃣ SQL (3 min)
+
+Supabase → SQL Editor → pega `2026_sprint_11_6.sql` → Run.
+
+**Verifica al final del output:**
 ```
-widgets_with_settings        : 3 (tus 3 widgets actuales ahora tienen defaults)
-helper_function              : true
-permission_channels_configure: true
-```
-
-### 2. Deploy Edge Functions
-
-Necesitas subir 2 funciones nuevas:
-
-**widget-config:**
-```bash
-cd supabase/functions
-# Asegúrate de tener supabase CLI instalado: npm install -g supabase
-supabase functions deploy widget-config --project-ref imvahmyywbtcfsduwbdq --no-verify-jwt
-```
-
-**widget-csat:**
-```bash
-supabase functions deploy widget-csat --project-ref imvahmyywbtcfsduwbdq --no-verify-jwt
-```
-
-⚠️ **`--no-verify-jwt` es crítico**: hace la función pública (accesible desde el widget en sitios del cliente).
-
-Si no tienes supabase CLI, puedes deployarlos manualmente:
-- Dashboard → Edge Functions → New Function
-- Nombre: `widget-config` (exacto)
-- Pega el contenido de `supabase/functions/widget-config/index.ts`
-- Marca "Invocable without JWT" (muy importante)
-- Deploy
-
-Repite para `widget-csat`.
-
-### 3. Copiar archivos frontend
-
-Copia los 13 archivos respetando estructura `/src/...` y `/public/widget.js`.
-
-### 4. Actualizar widget.js con la anon key
-
-Abre `public/widget.js`, línea ~27:
-```js
-const SUPABASE_ANON_KEY = window.LORA_SUPABASE_ANON_KEY || ''
+tabla_creada:    true
+rpc_publica:     true
+configs_seed:    8
 ```
 
-**Opción A (recomendada):** en build time inyecta la anon key desde variable de entorno.
+Y ves un preview de las 8 configs sembradas (admin_url, widget_url, brand_name, etc.).
 
-**Opción B (simple):** hardcodea tu anon key pública:
-```js
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5c...' // tu anon key
+### 2️⃣ Deploy Edge Function (5 min)
+
+```powershell
+cd C:\xampp\htdocs\proyectos\chatbot
+supabase functions deploy public-config --no-verify-jwt
 ```
 
-Recuerda que la **anon key es pública** (ya está en tu app principal), no es un secreto.
+⚠️ El `--no-verify-jwt` es CRÍTICO: el widget.js no tiene auth.
 
-### 5. Build
+**Test rápido en navegador:**
+```
+https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/public-config
+```
+
+Debe devolver JSON con `widget_url`, `brand_name`, etc. (las is_public=true).
+
+### 3️⃣ Copiar archivos NUEVOS (10 archivos)
+
+Respeta las rutas exactas desde `/src/`. El widget.js va a `/public/`.
+
+### 4️⃣ Reemplazar archivos del Sprint 11.5 (2 archivos)
+
+- `ChannelCard.vue` (lo creé en 11.5, sin riesgo)
+- `WidgetInstallationTab.vue` (lo creé en Sprint 11, sin riesgo)
+
+### 5️⃣ Parche en `src/router/index.ts`
+
+**ABRIR el archivo y BUSCAR** este bloque:
+
+```typescript
+  {
+    path: '/super-admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { requiresAuth: true, superAdmin: true },
+    children: [
+      { path: '', redirect: { name: 'super-admin.organizations' } },
+      {
+        path: 'organizations',
+        name: 'super-admin.organizations',
+        component: () => import('@/modules/super-admin/views/OrganizationsView.vue'),
+        meta: { title: 'Organizaciones', superAdmin: true }
+      }
+    ]
+  },
+```
+
+**REEMPLAZARLO por:**
+
+```typescript
+  {
+    path: '/super-admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { requiresAuth: true, superAdmin: true },
+    children: [
+      { path: '', redirect: { name: 'super-admin.organizations' } },
+      {
+        path: 'organizations',
+        name: 'super-admin.organizations',
+        component: () => import('@/modules/super-admin/views/OrganizationsView.vue'),
+        meta: { title: 'Organizaciones', superAdmin: true }
+      },
+      // 🆕 Sprint 11.6
+      {
+        path: 'system-config',
+        name: 'super-admin.system-config',
+        component: () => import('@/modules/super-admin/views/SystemConfigView.vue'),
+        meta: { title: 'Configuración del Sistema', superAdmin: true }
+      }
+    ]
+  },
+```
+
+Solo agregaste el bloque `// 🆕 Sprint 11.6` con su llave previa. **Nada más cambia.**
+
+### 6️⃣ Parche en `src/layouts/AdminLayout.vue`
+
+**BUSCAR** la sección "LORA Admin" donde está 🏢 Organizaciones (debería ser un `v-if` con `isSuperAdmin`).
+
+Probablemente se ve algo así:
+
+```vue
+<!-- Sección LORA Admin (solo super_admin) -->
+<div v-if="isSuperAdmin">
+  <div class="...">LORA Admin</div>
+  <RouterLink :to="{ name: 'super-admin.organizations' }">
+    🏢 Organizaciones
+  </RouterLink>
+</div>
+```
+
+**AGREGAR** una nueva `RouterLink` justo después de la de Organizaciones (dentro del mismo `<div v-if="isSuperAdmin">`):
+
+```vue
+<RouterLink :to="{ name: 'super-admin.system-config' }" class="[copia-las-mismas-clases-CSS-de-Organizaciones]">
+  🔧 Configuración del Sistema
+</RouterLink>
+```
+
+**Importante:** copia EXACTAMENTE las clases CSS que tiene la `RouterLink` de Organizaciones para mantener el estilo consistente. Si me pasas el bloque exacto te mando el parche con las clases correctas.
+
+### 7️⃣ Parche en `src/main.ts` o `src/App.vue` — cargar config al iniciar
+
+**BUSCAR** donde se monta la app (típicamente en `main.ts`):
+
+```typescript
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import App from './App.vue'
+import router from './router'
+
+const app = createApp(App)
+app.use(createPinia())
+app.use(router)
+app.mount('#app')
+```
+
+**AGREGAR** después de `app.use(createPinia())` y antes de `app.mount`:
+
+```typescript
+// 🆕 Sprint 11.6: cargar config pública del sistema
+import { useSystemConfigStore } from '@/stores/system-config.store'
+useSystemConfigStore().loadPublic()  // fire and forget, no bloquea
+```
+
+O alternativamente, puedes hacerlo en `App.vue` con `onMounted` si prefieres.
+
+### 8️⃣ Build + verificar
 
 ```powershell
 npm run build
 ```
 
-### 6. Deploy FTP
+**Debe pasar sin errores.** Si aparece algo, pégame el output completo.
 
-Sube todo `dist/` a `/public_html/lora/` como siempre.
+### 9️⃣ Commit + Deploy FTP
 
----
-
-## 🧪 Tests en producción
-
-### Test 1 — Vista de configuración carga
-
-1. Login en `lora.jabenter.com`
-2. Sidebar → **Canales** → clic en un widget web
-3. Debería abrir `/admin/channels/widget/:id`
-4. ✅ Verás: tabs (Apariencia, Pre-chat, Post-chat, Instalación)
-
-**⚠️ Si al clic en el widget no te lleva a esta ruta:** tu ChannelsView actual no está pasando al routing nuevo. En ese caso, navega manualmente a:
-```
-https://lora.jabenter.com/admin/channels/widget/033fd98f-be93-4bf5-b090-94e26f091d94
-```
-
-(usa uno de tus 3 channel IDs)
-
-### Test 2 — Tab Apariencia
-
-- Cambia color → selector o presets
-- Cambia posición → izquierda / derecha
-- Cambia nombre de marca → "Soporte Norson"
-- Pega URL de logo → opcional
-- Cambia mensaje de bienvenida
-- Click **"Guardar cambios"**
-- ✅ Toast verde "Configuración guardada"
-
-### Test 3 — Tab Pre-chat
-
-- Toggle "Pre-chat activo" a ON
-- Selecciona modo "Opcional"
-- Activa campo "Teléfono" con toggle "Mostrar"
-- Marca "Obligatorio" para email
-- Reordena con flechas ▲▼
-- Click "Guardar"
-
-### Test 4 — Tab Post-chat
-
-- Toggle "Post-chat activo" a ON
-- Activa "Permitir comentario"
-- Personaliza textos
-- Click "Guardar"
-
-### Test 5 — Tab Instalación
-
-- Copia el snippet con el botón
-- ✅ Toast "Copiado al portapapeles"
-- Léelo: debe tener tu channelId correcto
-
-### Test 6 — Widget en sitio externo (el test crítico)
-
-1. Ve a [CodePen.io](https://codepen.io/pen)
-2. En HTML pega el snippet que copiaste en Test 5
-3. En Settings → Behavior → desactiva Auto-Update
-4. Espera que el Pen recargue
-5. ✅ Ves el botón flotante 💬 con tu color custom
-6. Click al botón → aparece el pre-chat (si lo activaste)
-7. Completa el form → se abre el chat
-8. Envía un mensaje → bot IA responde
-9. Ve al admin `/admin/inbox` → ves la conversación con los datos del pre-chat
-
-### Test 7 — Post-chat funciona
-
-1. En el Inbox, marca la conversación como **Resuelta**
-2. **NOTA:** actualmente el widget NO sabe automáticamente que la conv se resolvió. Para probar el post-chat **manualmente**:
-   - Abre DevTools en el tab con el widget
-   - Consola: `window.LoraChatAPI.showPostChat()`
-3. ✅ Ves el modal de estrellas
-4. Selecciona 4 estrellas + comentario → click "Enviar"
-5. ✅ Ves "¡Gracias por tu tiempo!"
-6. Ve al admin/Analytics → esa conversación tiene CSAT 4
-
-**⚠️ Limitación conocida de Sprint 11:** el post-chat automático al resolver requiere un evento de realtime adicional que implementaremos en Sprint 11.5 si decidimos refinar. Por ahora se dispara manualmente con la API JS expuesta.
-
-### Test 8 — Help panel
-
-1. En `/admin/channels/widget/:id` click en **💡 Guía** arriba-derecha
-2. ✅ Se abre panel lateral con 6 secciones expandibles
-3. Expande "¿Cuándo activar el pre-chat?"
-4. Expande "Glosario"
-5. Cierra con ✕
-
-### Test 9 — Tooltips
-
-En Tab Apariencia o Pre-chat, hover sobre los iconitos `ℹ`:
-- ✅ Aparece tooltip oscuro con explicación breve
-
-### Test 10 — Dirty state
-
-1. Cambia un valor
-2. Verás badge ámbar flotante "⚠️ Tienes cambios sin guardar"
-3. Intenta navegar fuera → browser pregunta "¿Salir sin guardar?"
-4. Click "Descartar" → todo vuelve al original
-
----
-
-## 🎨 Lo que va a ver tu cliente (flujo completo)
-
-```
-1. Cliente abre tu sitio
-   ↓
-2. Ve botón flotante "💬" (con tu color)
-   ↓
-3. Click → aparece ventana del chat
-   ↓ (si pre-chat está activo)
-4. Form: "Antes de empezar"
-   [ Nombre       ]
-   [ Email        ]
-   [ Teléfono     ]  (si activaste)
-   [ Motivo ▼     ]  (si activaste)
-   [ Iniciar conversación ]
-   ↓
-5. Chat normal con tu bot IA
-   ↓
-6. Bot responde o pasa a agente humano
-   ↓
-7. Al cerrar la conversación (si post-chat activo):
-   "¿Cómo fue tu atención?"
-   ★ ★ ★ ★ ★
-   [comentario opcional]
-   [Enviar]
-   ↓
-8. "¡Gracias por tu tiempo!" → se cierra
-```
-
----
-
-## 🐛 Troubleshooting
-
-### "No se puede cargar config" en widget
-
-La Edge Function `widget-config` no está deployada o no es pública.
-Verifica:
-```bash
-curl https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/widget-config?channel_id=TU_ID
-```
-Debe devolver JSON con el settings. Si da 401, la función no tiene `--no-verify-jwt`.
-
-### Widget aparece pero sin estilos custom
-
-El `settings` está vacío. Verifica con SQL:
-```sql
-SELECT id, name, jsonb_pretty(settings) FROM channels WHERE type = 'web_widget';
-```
-
-Si algún widget tiene `{}`, re-corre el SQL de migración — el UPDATE solo afecta widgets con settings vacío.
-
-### CSAT no se guarda
-
-Probablemente `widget-csat` no está deployada. Verifica con:
-```bash
-curl -X POST https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/widget-csat \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_id":"test","rating":5}'
-```
-
-### Widget se ve en mobile mal
-
-Los anchos del widget son fijos en 380px. Si quieres 100% responsive para pantallas &lt;400px, puedes editar `public/widget.js` línea del `#lora-chat-window`:
-```css
-width: 380px;
-max-width: calc(100vw - 40px);
-```
-
----
-
-## 💡 Decisiones de diseño importantes
-
-1. **Settings como JSONB único** (en lugar de columnas): máxima flexibilidad para agregar features sin migraciones.
-2. **Edge Functions públicas para widget**: no exponen la service role key. El helper RPC `get_widget_public_config` remueve cualquier campo sensible.
-3. **Widget carga config en runtime**: cambios en el admin se reflejan **instantáneamente** (hasta 5 min de cache HTTP) sin reinstalar snippet.
-4. **Merge defensivo de settings**: `mergeWidgetSettings()` garantiza que si añadimos un campo nuevo en el futuro (ej: `branding.font_family`), los widgets viejos siguen funcionando.
-5. **Validación en cliente Y servidor**: el form valida required antes de enviar, pero el RPC también rechazaría data mala.
-
----
-
-## 📊 Impacto en el sistema
-
-- ✅ Widgets existentes siguen funcionando (el snippet viejo sin pre-chat es compatible)
-- ✅ Nuevos widgets tienen pre-chat/post-chat deshabilitados por default (no-op)
-- ✅ Analytics empieza a recibir `csat_score` real cuando activen post-chat
-- ✅ Contacts con nombre/email/teléfono real cuando activen pre-chat
-
----
-
-## 💾 Commit sugerido
-
-```bash
-cd C:\xampp\htdocs\proyectos\chatbot
+```powershell
 git add -A
-git commit -m "feat(sprint-11): Widget update + Pre-chat + Post-chat + Help system
+git commit -m "feat(sprint-11.6): system_config parametrizado
 
 SQL:
-- Default settings para widgets existentes (backward compatible)
-- Helper RPC get_widget_public_config (expone settings sin secretos)
-- Permiso channels.configure
+- Tabla system_config con RLS (super_admin write, all read)
+- RPC publica get_public_config para widget
+- 8 configs seed con admin.lorachat.net
 
-Edge Functions:
-- widget-config (pública, no-verify-jwt): sirve settings al widget
-- widget-csat (pública): recibe rating del post-chat
+Edge Function:
+- public-config (sin JWT, cache 5 min)
 
-Frontend Admin:
-- Vista /admin/channels/widget/:id con 4 tabs
-- Tab Apariencia: color, posicion, logo, mensajes
-- Tab Pre-chat: toggle + modo + campos configurables (visibilidad,
-  obligatorio, orden, labels)
-- Tab Post-chat: CSAT con estrellas y comentario opcional
-- Tab Instalación: snippet copy-paste con preview
-- Dirty state con warning antes de navegar
-- Help panel lateral con 6 secciones didacticas
-- Tooltips premium en cada elemento
+Frontend:
+- Tipos, repo, store Pinia con cache
+- Composable useSystemConfig
+- Vista SystemConfigView (super_admin) con tabs por categoria
+- ConfigItemEditor con validacion por tipo
+- Help panel con 6 secciones
 
-Widget:
-- Carga config dinamica de edge function
-- Pre-chat form con validacion cliente
-- Post-chat con CSAT estrellas + comentario
-- Realtime bidireccional mantenido
-- API expuesta: window.LoraChatAPI.showPostChat() para testing
+Refactor:
+- ChannelCard usa widgetUrl del store
+- WidgetInstallationTab usa widgetUrl del store
+- widget.js fetch a /public-config con cache localStorage
 
-Help system (Opción C):
-- Tooltips contextuales (hovers)
-- Panel lateral con 6 secciones expandibles
-- Contenido premium didactico (cuando activar, tips de conversion,
-  glosario)"
+Pendiente: limpiar referencias a lora.jabenter.com en estado-proyecto.md y README.md (no criticas)"
 
 git push
+npm run build
+# CoreFTP -> /public_html/lora/ -> borrar todo -> subir dist/
 ```
 
 ---
 
-## 🎯 Siguiente sprint
+## 🧪 Tests post-deploy
 
-Con Sprint 11 en producción, el roadmap sigue con:
+### Test 1 — Página accesible solo para super_admin
+- Login como super_admin → ves "🔧 Configuración del Sistema" en sidebar
+- Login como admin normal → NO la ves
+- Acceso directo a `/super-admin/system-config` redirige si no eres super_admin
 
-- **Sprint 12:** Help System framework completo + docs retroactivas de Sprints 7-10
-- **Sprint 13:** Landing comercial lorachat.net
-- **Sprint 14:** Telegram como 2do canal
-- **Sprint 15:** Stripe billing
-- **Sprint 16:** WhatsApp Business API
-- **Sprint 17:** Constructor visual de flujos
+### Test 2 — Vista funciona
+- ✅ 8 configs cargadas
+- ✅ Tabs por categoría (URLs, Branding)
+- ✅ Click en una config → puedes editar
+- ✅ Click "Guardar" → toast verde
+- ✅ Click "🔄 Default" → confirmación + restaura
+
+### Test 3 — Cambio se propaga al admin
+- Modifica `brand_name` a "LORA Test"
+- Recarga otra pestaña del admin
+- En la sidebar (si lo usa) o footer debería verse "LORA Test"
+
+### Test 4 — Widget usa la config del store
+- Ve a `/admin/channels` → click "📋 Copiar HTML completo"
+- El snippet debe usar **la URL actual** del store (no hardcoded)
+
+### Test 5 — Endpoint público funciona
+- En navegador: `https://imvahmyywbtcfsduwbdq.supabase.co/functions/v1/public-config`
+- Devuelve JSON con configs públicas
+
+### Test 6 — Widget en producción carga config
+- Pega snippet en CodePen
+- Abre DevTools → Network
+- Debe ver request a `/public-config` que devuelve 200
+- Cache 5 min (localStorage `lora_public_config`)
+
+---
+
+## 🛡️ Validaciones de seguridad
+
+✅ **`is_public=false`** nunca se expone fuera de auth
+✅ **RLS** en tabla: solo super_admin escribe, autenticados leen
+✅ **RPC `get_public_config`** filtra solo `is_public=true`
+✅ **service_role_key** no se usa desde frontend
+✅ **anon key** no expone configs privadas (RLS lo previene)
+
+---
+
+## 🎯 Después de Sprint 11.6
+
+Con esto tienes:
+- ✅ Sistema parametrizable mantenible
+- ✅ Cambio de dominio = SQL UPDATE de 1 línea
+- ✅ Multi-tenant ready
+- ✅ Cache inteligente cliente
+- ✅ Documentación in-app
+
+Roadmap pendiente:
+- Sprint 12: Help System framework + docs retroactivas
+- Sprint 13: Landing comercial lorachat.net
+- Sprint 14: Telegram
+- Sprint 15: Stripe billing
+- Sprint 16: WhatsApp Business
+
+---
+
+## 🧹 Después: borrar lora.jabenter.com (tu estrategia "chaos")
+
+Una vez aplicado todo y testeado:
+
+1. cPanel → Subdomains → eliminar `lora.jabenter.com`
+2. Esperar 30 min
+3. Si algo explota:
+   - Identifica qué archivo todavía referencia el dominio viejo
+   - Cambia el valor en `system_config` con la URL correcta
+   - O actualiza el código fuente si está hardcoded
+
+Lo bueno es que con system_config, la mayoría de los cambios son SQL UPDATE.
+
+---
+
+## 📌 Si necesitas help
+
+Si algún build falla, pégame el output. Recordatorio política nueva:
+
+✅ Toqué archivos compartidos solo via parches en chat (router, AdminLayout, main.ts)
+✅ ZIP solo con archivos nuevos o que yo creé (ChannelCard 11.5, WidgetInstallationTab 11)
+✅ Si rompo build, lo arreglo sin pedir más archivos
+
+Adelante con la aplicación, te espero. 🚀

@@ -1,6 +1,7 @@
 // Ruta: /src/router/index.ts
 // ═══════════════════════════════════════════════════════════════
 // MODIFICADO en Sprint 11: ruta /admin/channels/widget/:id
+// MODIFICADO en Sprint 11.6: ruta /super-admin/system-config
 // ═══════════════════════════════════════════════════════════════
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import {
@@ -73,6 +74,13 @@ const routes: RouteRecordRaw[] = [
         name: 'super-admin.organizations',
         component: () => import('@/modules/super-admin/views/OrganizationsView.vue'),
         meta: { title: 'Organizaciones', superAdmin: true }
+      },
+      // 🆕 Sprint 11.6
+      {
+        path: 'system-config',
+        name: 'super-admin.system-config',
+        component: () => import('@/modules/super-admin/views/SystemConfigView.vue'),
+        meta: { title: 'Configuración del Sistema', superAdmin: true }
       }
     ]
   },

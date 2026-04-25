@@ -1,10 +1,12 @@
 <!-- Ruta: /src/modules/channels/components/ChannelCard.vue -->
+<!-- 🆕 Sprint 11.6 (fix3): usa store directamente, sin destructurar -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ChannelMetrics } from '@/types/channel.types'
 import { getChannelMetadata, timeSince } from '@/types/channel.types'
 import { useUiStore } from '@/stores/ui.store'
+import { useSystemConfigStore } from '@/stores/system-config.store'
 import ChannelActionsMenu from './ChannelActionsMenu.vue'
 
 interface Props {
@@ -22,6 +24,8 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const ui = useUiStore()
+// 🆕 Sprint 11.6: store directo, accedo con configStore.widgetUrl (ya es string reactivo)
+const configStore = useSystemConfigStore()
 
 const meta = getChannelMetadata(props.channel.type)
 
@@ -51,7 +55,7 @@ function copyHtmlSnippet() {
 <script>
   window.LoraChat = { channelId: '${props.channel.channelId}' };
 <\/script>
-<script async src="https://lora.jabenter.com/widget.js"><\/script>`
+<script async src="${configStore.widgetUrl}"><\/script>`
   copyToClipboard(snippet, 'Código HTML')
 }
 
@@ -60,7 +64,7 @@ function copyChannelId() {
 }
 
 function copyWidgetUrl() {
-  copyToClipboard('https://lora.jabenter.com/widget.js', 'URL del widget')
+  copyToClipboard(configStore.widgetUrl, 'URL del widget')
 }
 
 function handleClickOutside(e: MouseEvent) {

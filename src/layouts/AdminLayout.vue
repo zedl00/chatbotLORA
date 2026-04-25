@@ -1,5 +1,6 @@
 <!-- Ruta: /src/layouts/AdminLayout.vue -->
 <!-- MODIFICADO en Sprint 10: menú "📊 Analytics" visible arriba -->
+<!-- MODIFICADO en Sprint 11.6: agregado "🔧 Configuración del Sistema" en sección LORA Admin -->
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
@@ -66,7 +67,9 @@ const navItems: NavItem[] = [
   { to: '/admin/audit',        label: 'Auditoría',    icon: '📋', permission: 'audit.read',   section: 'Administración' },
   { to: '/admin/settings',     label: 'Configuración',icon: '⚙️', permission: 'settings.read', section: 'Administración' },
 
-  { to: '/super-admin/organizations', label: 'Organizaciones', icon: '🏢', section: 'LORA Admin', superAdminOnly: true }
+  { to: '/super-admin/organizations', label: 'Organizaciones', icon: '🏢', section: 'LORA Admin', superAdminOnly: true },
+  // 🆕 Sprint 11.6
+  { to: '/super-admin/system-config', label: 'Configuración del Sistema', icon: '🔧', section: 'LORA Admin', superAdminOnly: true }
 ]
 
 const visibleNavGrouped = computed(() => {
