@@ -1,3 +1,7 @@
+> ✅ **Estado:** En producción en [admin.lorachat.net](https://admin.lorachat.net)
+> 📅 **Sprint actual:** 11.6 — System Configuration
+
+
 # 🔧 Sprint 11.6 — System Configuration (parametrización global)
 
 Tabla `system_config` editable desde el admin con vista premium para super_admin.
