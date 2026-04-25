@@ -1,0 +1,115 @@
+# Ruta: .github/workflows/deploy.yml
+# ═══════════════════════════════════════════════════════════════
+# GitHub Actions — Deploy a Producción
+#
+# Se ejecuta SOLO cuando algo se mergea a main.
+# Hace build limpio y sube dist/ por FTPS a admin.lorachat.net
+#
+# Secrets requeridos (en Settings → Secrets and variables → Actions):
+#   - FTP_SERVER    (ej: ftp.lorachat.net)
+#   - FTP_USERNAME  (ej: lorachat@admin.lorachat.net)
+#   - FTP_PASSWORD  (la contraseña FTP)
+# ═══════════════════════════════════════════════════════════════
+
+name: Deploy to Production
+
+# Solo se dispara con push a main (que es lo que pasa al mergear PR)
+on:
+  push:
+    branches:
+      - main
+  # También permite ejecutar manualmente desde GitHub UI
+  workflow_dispatch:
+
+# Permisos mínimos necesarios
+permissions:
+  contents: read
+
+# Solo 1 deploy a la vez. Si llega otro mientras corre, espera.
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to admin.lorachat.net
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Bajar el código
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Configurar Node.js (con caché de npm para ser más rápido)
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Instalar dependencias (más rápido que npm install para CI)
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # 4. Build de producción
+      - name: 🏗️ Build for production
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # 5. Mostrar info del build (útil para debugging)
+      - name: 📊 Show build info
+        run: |
+          echo "=== Build size ==="
+          du -sh dist/
+          echo ""
+          echo "=== Top files ==="
+          du -ah dist/ | sort -rh | head -10
+          echo ""
+          echo "=== File count ==="
+          find dist/ -type f | wc -l
+
+      # 6. Verificar archivos críticos antes de subir
+      - name: ✅ Pre-deploy checks
+        run: |
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ ERROR: dist/index.html no existe. Build falló silenciosamente."
+            exit 1
+          fi
+          if [ ! -f "dist/widget.js" ]; then
+            echo "⚠️ WARNING: dist/widget.js no existe (puede ser normal si no se generó)"
+          fi
+          echo "✅ Pre-deploy checks pasaron"
+
+      # 7. Deploy por FTPS
+      - name: 🚀 Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          # Mantener .htaccess en el server si no está en dist/
+          # (por si alguna vez lo editas manualmente en producción)
+          dangerous-clean-slate: false
+          # Logs detallados para diagnóstico
+          log-level: standard
+          # Excluir archivos típicos que no deben subirse
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.DS_Store
+            **/Thumbs.db
+
+      # 8. Mensaje de éxito
+      - name: ✨ Deploy exitoso
+        run: |
+          echo "🎉 Deploy completado a admin.lorachat.net"
+          echo ""
+          echo "Próximos pasos:"
+          echo "  - Verificar https://admin.lorachat.net"
+          echo "  - Revisar logs si algo no funciona"
